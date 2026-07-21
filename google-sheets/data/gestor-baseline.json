@@ -1,0 +1,18 @@
+{
+  "NTQ5467": { "loc1": "BIRA", "banco": "SANTANDER", "assessoria": "TATTINI", "contato": "ADRIANA", "premio": 2400, "nfNr": "RECIBO", "apoio": 300, "guincho": 250 },
+  "PJC3314": { "loc1": "BIRA", "banco": "C6", "assessoria": "B PEREZ", "contato": "PAULO", "premio": 1300, "nfNr": "779", "apoio": 300, "guincho": 250 },
+  "PKD0F99": { "loc1": "BIRA", "banco": "MAPFRE", "assessoria": "J BARBOSA", "contato": "DAYVSON", "premio": 2250, "nfNr": "RECIBO", "apoio": 300, "guincho": 250 },
+  "PJY6J54": { "loc1": "BIRA", "banco": "VOTORANTIM", "assessoria": "N P", "contato": "PROD", "apoio": 300, "guincho": 250 },
+  "RDG8G45": { "loc1": "BIRA", "banco": "ALFA", "assessoria": "S BENELI", "contato": "GIOVANNA", "premio": 1800, "nfNr": "PIX", "apoio": 300, "guincho": 250 },
+  "OUV4507": { "loc1": "BIRA", "banco": "VOTORANTIM", "assessoria": "Schulze", "contato": "GESSIKA", "premio": 1750, "nfNr": "774 775 776", "apoio": 300, "guincho": 250 },
+  "RVG4D60": { "loc1": "BIRA", "banco": "BRD", "assessoria": "N P", "contato": "PROD", "apoio": 300, "guincho": 250 },
+  "PKI5B45": { "loc1": "BIRA", "banco": "ALFA", "assessoria": "S BENELI", "contato": "GIOVANNA", "premio": 2200, "nfNr": "PIX", "apoio": 300, "guincho": 250 },
+  "PKT4H93": { "loc1": "BIRA", "banco": "BRD", "assessoria": "A BRAZ", "contato": "NALDO/CLARA", "premio": 2050, "nfNr": "746", "apoio": 300, "guincho": 250 },
+  "OLA3687": { "loc1": "BIRA", "banco": "LUIZA", "assessoria": "Zaiter", "premio": 2250, "nfNr": "RECIBO", "apoio": 300, "guincho": 250 },
+  "BBH7J00": { "loc1": "BIRA", "banco": "CNH", "assessoria": "Renato", "apoio": 500, "guincho": 700 },
+  "NZH9C58": { "loc1": "MACIEL", "banco": "BRADESCO", "assessoria": "HCOSTA", "contato": "ALINE", "premio": 2100, "nfNr": "780 781 782 783" },
+  "PLB2D79": { "loc1": "MACIEL", "banco": "BRADESCO", "assessoria": "JCS", "contato": "CAMILA", "premio": 1750, "nfNr": "784 785 786" },
+  "JGN6273": { "loc1": "MACIEL", "banco": "VOTORANTIM", "assessoria": "N P", "contato": "PROD" },
+  "TGX0I58": { "loc1": "MACIEL", "banco": "HONDA", "assessoria": "N P", "contato": "PROD" },
+  "REM7H98": { "loc1": "MACIEL", "banco": "GM", "assessoria": "BJL", "contato": "PEDRO", "premio": 2000, "nfNr": "AGUARDANDO EMISSÃO" }
+}

@@ -1,0 +1,17 @@
+{
+  "name": "gps-ba",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev:api": "npm run api --prefix google-sheets",
+    "dev:web": "npm run dev --prefix dashboard",
+    "build": "npm run build --prefix dashboard",
+    "sync": "npm run sync --prefix google-sheets",
+    "audit": "npm run audit --prefix google-sheets"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "exceljs": "^4.4.0",
+    "googleapis": "^144.0.0"
+  }
+}

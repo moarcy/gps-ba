@@ -1,0 +1,17 @@
+{
+  "name": "gps-ba-google-sheets",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node setup-check.js",
+    "example": "node example-usage.js",
+    "audit": "node audit-controle.js",
+    "sync": "node run-sync.js",
+    "api": "node api-server.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "exceljs": "^4.4.0",
+    "googleapis": "^144.0.0"
+  }
+}

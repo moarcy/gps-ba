@@ -1,0 +1,9 @@
+credentials.json
+service-account.json
+.env
+token.json
+node_modules/
+.cache/
+__pycache__/
+*.pyc
+.venv/

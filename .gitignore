@@ -1,0 +1,47 @@
+# Dependencies
+node_modules/
+dashboard/node_modules/
+google-sheets/node_modules/
+
+# Build
+dashboard/dist/
+dist/
+
+# Secrets & local
+.env
+.env.*
+!.env.example
+google-sheets/credentials.json
+google-sheets/service-account.json
+google-sheets/token.json
+google-sheets/.cache/
+**/credentials.json
+**/*.pem
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
+.idea/
+
+# Logs / temp
+*.log
+npm-debug.log*
+.cache/
+tmp/
+test-gestor-out.xlsx
+_xlsx_tmp/
+_extract_*
+
+# Documentos / planilhas locais (não versionar)
+*.xlsx
+*.xls
+*.pdf
+*.jpeg
+*.jpg
+*.png
+Documentos*/
+CONTROLE*/
+VISTORIA*/
+producao_gpsba*
