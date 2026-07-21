@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import dotenv from "dotenv";
@@ -10,8 +11,14 @@ dotenv.config({ path: path.join(__dirname, ".env") });
 
 const SCOPES = ["https://www.googleapis.com/auth/drive"];
 
-const CACHE_DIR =
-  process.env.GPS_BA_CACHE_DIR || path.join(__dirname, ".cache");
+/** Em Vercel/Lambda só /tmp é gravável. */
+function getCacheDir() {
+  if (process.env.GPS_BA_CACHE_DIR) return process.env.GPS_BA_CACHE_DIR;
+  if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) {
+    return path.join(os.tmpdir(), "gps-ba-cache");
+  }
+  return path.join(__dirname, ".cache");
+}
 
 export const FILES_CONFIG = [
   {
@@ -68,8 +75,9 @@ export async function getFileMeta(fileId) {
 }
 
 function cachePath(fileId) {
-  fs.mkdirSync(CACHE_DIR, { recursive: true });
-  return path.join(CACHE_DIR, `${fileId}.xlsx`);
+  const dir = getCacheDir();
+  fs.mkdirSync(dir, { recursive: true });
+  return path.join(dir, `${fileId}.xlsx`);
 }
 
 export async function downloadExcel(fileId, { useCache = false } = {}) {

@@ -1,6 +1,4 @@
 import ExcelJS from "exceljs";
-import os from "node:os";
-import path from "node:path";
 import { downloadExcel } from "../google-sheets/excel-drive-client.js";
 import { buildDashboardPayload } from "../google-sheets/lib/dashboard-data.js";
 import {
@@ -20,11 +18,6 @@ async function loadMergedRecords() {
   const producaoId = process.env.SPREADSHEET_ID_2;
   if (!gestorId || !producaoId) {
     throw new Error("SPREADSHEET_ID_1 e SPREADSHEET_ID_2 são obrigatórios.");
-  }
-
-  // Em serverless (Vercel) o cache local do Drive pode ir para /tmp
-  if (process.env.VERCEL) {
-    process.env.GPS_BA_CACHE_DIR = path.join(os.tmpdir(), "gps-ba-cache");
   }
 
   const gestorPath = await downloadExcel(gestorId, { useCache: false });
