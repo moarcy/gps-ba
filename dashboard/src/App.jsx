@@ -13,7 +13,17 @@ import { useDashboard } from "./hooks/useDashboard";
 import { formatBRL, formatDate } from "./lib/format";
 import "./index.css";
 
-const CHART_COLORS = ["#d4a017", "#3dba8c", "#6b8cae", "#e05a45", "#c4b59a"];
+const CHART_MUTED = "#3a4454";
+const CHART_ACCENT = ["#ff8a3d", "#ff5c6a"];
+
+function highlightIndex(rows, valueKey = "premio") {
+  if (!rows.length) return -1;
+  let best = 0;
+  for (let i = 1; i < rows.length; i++) {
+    if ((rows[i][valueKey] || 0) >= (rows[best][valueKey] || 0)) best = i;
+  }
+  return best;
+}
 
 function ChartTooltip({ active, payload, label }) {
   if (!active || !payload?.length) return null;
@@ -161,6 +171,10 @@ export default function App() {
     setLoc1("all");
     setQ("");
   };
+
+  const monthHighlight = highlightIndex(monthChart);
+  const assessoriaHighlight = highlightIndex(assessoriaChart);
+  const assessoriaMax = assessoriaChart[0]?.premio || 1;
 
   const alertCount = data?.alerts?.length || 0;
 
@@ -328,30 +342,40 @@ export default function App() {
             </article>
           </div>
 
-          <div className="panel">
+          <div className="panel panel-soft">
             <div className="panel-head">
               <h2>Prêmio por mês</h2>
+              <button type="button" className="link-more" onClick={() => setTab("insights")}>
+                Ver detalhes ›
+              </button>
             </div>
             <div className="chart-box">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={monthChart} margin={{ top: 8, right: 4, left: -8, bottom: 0 }}>
-                  <CartesianGrid stroke="rgba(232,220,196,0.08)" vertical={false} />
+                  <CartesianGrid stroke="rgba(255,255,255,0.04)" vertical={false} />
                   <XAxis
                     dataKey="label"
-                    stroke="#9aa6b5"
-                    tick={{ fill: "#9aa6b5", fontSize: 11 }}
+                    stroke="#6b7380"
+                    tick={{ fill: "#8b93a1", fontSize: 11 }}
+                    axisLine={false}
+                    tickLine={false}
                     interval="preserveStartEnd"
                   />
                   <YAxis
-                    stroke="#9aa6b5"
+                    stroke="#6b7380"
                     width={32}
-                    tick={{ fill: "#9aa6b5", fontSize: 11 }}
+                    tick={{ fill: "#8b93a1", fontSize: 11 }}
+                    axisLine={false}
+                    tickLine={false}
                     tickFormatter={(v) => `${Math.round(v / 1000)}k`}
                   />
-                  <Tooltip content={<ChartTooltip />} />
-                  <Bar dataKey="premio" name="Prêmio" radius={[6, 6, 0, 0]}>
+                  <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(255,255,255,0.03)" }} />
+                  <Bar dataKey="premio" name="Prêmio" radius={[8, 8, 8, 8]} barSize={14}>
                     {monthChart.map((_, i) => (
-                      <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                      <Cell
+                        key={i}
+                        fill={i === monthHighlight ? CHART_ACCENT[0] : CHART_MUTED}
+                      />
                     ))}
                   </Bar>
                 </BarChart>
@@ -361,7 +385,12 @@ export default function App() {
 
           {alertCount > 0 && (
             <div className="alert-list">
-              <h2>Atenção</h2>
+              <div className="panel-head">
+                <h2>Atenção</h2>
+                <button type="button" className="link-more" onClick={() => setTab("veiculos")}>
+                  Ver veículos ›
+                </button>
+              </div>
               {(data.alerts || []).slice(0, 4).map((a, i) => (
                 <div
                   key={`${a.placa}-${a.type}-${i}`}
@@ -468,9 +497,10 @@ export default function App() {
 
         {/* INSIGHTS */}
         <section className={`tab-panel ${tab === "insights" ? "is-active" : ""}`}>
-          <div className="panel">
+          <div className="panel panel-soft">
             <div className="panel-head">
               <h2>Top assessorias</h2>
+              <span className="chip-soft">Período</span>
             </div>
             <div className="chart-box chart-box-tall">
               <ResponsiveContainer width="100%" height="100%">
@@ -479,34 +509,53 @@ export default function App() {
                   layout="vertical"
                   margin={{ top: 8, right: 12, left: 4, bottom: 0 }}
                 >
-                  <CartesianGrid stroke="rgba(232,220,196,0.08)" horizontal={false} />
+                  <CartesianGrid stroke="rgba(255,255,255,0.04)" horizontal={false} />
                   <XAxis
                     type="number"
-                    stroke="#9aa6b5"
-                    tick={{ fill: "#9aa6b5", fontSize: 11 }}
+                    stroke="#6b7380"
+                    tick={{ fill: "#8b93a1", fontSize: 11 }}
+                    axisLine={false}
+                    tickLine={false}
                     tickFormatter={(v) => `${Math.round(v / 1000)}k`}
                   />
                   <YAxis
                     type="category"
                     dataKey="key"
                     width={88}
-                    stroke="#9aa6b5"
-                    tick={{ fill: "#9aa6b5", fontSize: 10 }}
+                    stroke="#6b7380"
+                    tick={{ fill: "#8b93a1", fontSize: 10 }}
+                    axisLine={false}
+                    tickLine={false}
                   />
-                  <Tooltip content={<ChartTooltip />} />
-                  <Bar dataKey="premio" name="Prêmio" fill="#d4a017" radius={[0, 6, 6, 0]} />
+                  <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(255,255,255,0.03)" }} />
+                  <Bar dataKey="premio" name="Prêmio" radius={[8, 8, 8, 8]} barSize={12}>
+                    {assessoriaChart.map((_, i) => (
+                      <Cell
+                        key={i}
+                        fill={i === assessoriaHighlight ? CHART_ACCENT[0] : CHART_MUTED}
+                      />
+                    ))}
+                  </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </div>
           </div>
 
           <div className="rank-list">
-            <h2>Ranking</h2>
+            <div className="panel-head">
+              <h2>Ranking</h2>
+            </div>
             {assessoriaChart.map((item, index) => (
               <div key={item.key} className="rank-row">
                 <span className="rank-pos">{index + 1}</span>
                 <div className="rank-info">
                   <strong>{item.key}</strong>
+                  <div className="progress-track">
+                    <div
+                      className="progress-fill"
+                      style={{ width: `${Math.max(8, (item.premio / assessoriaMax) * 100)}%` }}
+                    />
+                  </div>
                   <span>{item.veiculos} veíc.</span>
                 </div>
                 <strong className="rank-value">{formatBRL(item.premio)}</strong>
