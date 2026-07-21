@@ -679,9 +679,64 @@ button:disabled {
   gap: 12px;
 }
 
+.sheet-tall {
+  max-height: min(92dvh, 760px);
+}
+
 .sheet-foot {
   padding: 10px 16px 14px;
   border-top: 1px solid var(--line);
+}
+
+.sheet-foot-inline {
+  border-top: 0;
+  padding: 8px 0 4px;
+}
+
+.add-form {
+  padding-bottom: 8px;
+}
+
+.filter-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.filter-row .filter {
+  min-width: 0;
+}
+
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.88rem;
+  color: var(--sand-dim);
+}
+
+.check-row input {
+  width: 16px;
+  height: 16px;
+  accent-color: #7aa2f0;
+}
+
+.form-error {
+  margin: 0;
+  color: #c48b8b;
+  font-size: 0.88rem;
+}
+
+.form-ok {
+  margin: 0;
+  color: var(--mint);
+  font-size: 0.88rem;
+}
+
+@media (max-width: 520px) {
+  .filter-row {
+    grid-template-columns: 1fr;
+  }
 }
 
 .filter label {

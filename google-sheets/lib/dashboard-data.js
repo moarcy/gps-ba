@@ -166,6 +166,7 @@ export function buildDashboardPayload(records, { source = "gestor" } = {}) {
   const months = [...new Set(vehicles.map((v) => v.monthKey))].sort();
   const assessorias = [...new Set(vehicles.map((v) => v.assessoria).filter(Boolean))].sort();
   const localizadores = [...new Set(vehicles.map((v) => v.loc1).filter(Boolean))].sort();
+  const bancos = [...new Set(vehicles.map((v) => v.banco).filter(Boolean))].sort();
 
   return {
     meta: {
@@ -184,6 +185,7 @@ export function buildDashboardPayload(records, { source = "gestor" } = {}) {
       months: months.map((key) => ({ key, label: formatMonthLabel(key) })),
       assessorias,
       localizadores,
+      bancos,
     },
   };
 }

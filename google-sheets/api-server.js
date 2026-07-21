@@ -3,6 +3,7 @@ import ExcelJS from "exceljs";
 import http from "node:http";
 import { URL } from "node:url";
 import { downloadExcel } from "./excel-drive-client.js";
+import { addVehicleToGestor } from "./lib/add-vehicle.js";
 import { buildDashboardPayload } from "./lib/dashboard-data.js";
 import {
   mergeControleRecords,
@@ -22,16 +23,25 @@ const cache = {
   ttlMs: 60_000,
 };
 
-function sendJson(res, status, body) {
+function sendJson(res, status, body, extraHeaders = {}) {
   const json = JSON.stringify(body);
   res.writeHead(status, {
     "Content-Type": "application/json; charset=utf-8",
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET, OPTIONS",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type",
     "Cache-Control": "no-store",
+    ...extraHeaders,
   });
   res.end(json);
+}
+
+async function readJsonBody(req) {
+  const chunks = [];
+  for await (const chunk of req) chunks.push(chunk);
+  const raw = Buffer.concat(chunks).toString("utf8").trim();
+  if (!raw) return {};
+  return JSON.parse(raw);
 }
 
 async function loadMergedRecords() {
@@ -78,23 +88,34 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    if (url.pathname === "/api/dashboard") {
+    if (url.pathname === "/api/dashboard" && req.method === "GET") {
       const force = url.searchParams.get("refresh") === "1";
       const data = await getDashboardData({ force });
       sendJson(res, 200, data);
       return;
     }
 
+    if (url.pathname === "/api/vehicles" && req.method === "POST") {
+      const body = await readJsonBody(req);
+      const overwrite = Boolean(body.overwrite);
+      const result = await addVehicleToGestor(body, { overwrite });
+      cache.payload = null;
+      cache.loadedAt = 0;
+      sendJson(res, overwrite && result.updated ? 200 : 201, result);
+      return;
+    }
+
     sendJson(res, 404, { error: "Not found" });
   } catch (error) {
     console.error(error);
-    sendJson(res, 500, { error: error.message || "Erro interno" });
+    sendJson(res, error.status || 500, { error: error.message || "Erro interno", code: error.code });
   }
 });
 
 server.listen(PORT, () => {
   console.log(`GPS BA Dashboard API → http://localhost:${PORT}`);
-  console.log(`  GET /api/health`);
-  console.log(`  GET /api/dashboard`);
-  console.log(`  GET /api/dashboard?refresh=1`);
+  console.log(`  GET  /api/health`);
+  console.log(`  GET  /api/dashboard`);
+  console.log(`  GET  /api/dashboard?refresh=1`);
+  console.log(`  POST /api/vehicles`);
 });

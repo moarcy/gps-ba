@@ -43,3 +43,7 @@ Copie `.env.example` → `google-sheets/.env` (e na Vercel as mesmas chaves):
 4. Deploy
 
 A UI chama `/api/dashboard`, servida pela function em `api/dashboard.js`.
+
+### Adicionar veículo
+
+No header, use **+**. O `POST /api/vehicles` grava na planilha do **gestor** (`Planilha1`), fonte do sync.

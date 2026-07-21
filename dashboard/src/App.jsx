@@ -9,6 +9,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import AddVehicleSheet from "./AddVehicleSheet";
 import { useDashboard } from "./hooks/useDashboard";
 import { formatBRL, formatDate } from "./lib/format";
 import "./index.css";
@@ -97,22 +98,32 @@ function IconRefresh() {
   );
 }
 
+function IconPlus() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path fill="currentColor" d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6V5Z" />
+    </svg>
+  );
+}
+
 export default function App() {
   const { data, loading, error, reload } = useDashboard();
   const [month, setMonth] = useState("all");
   const [assessoria, setAssessoria] = useState("all");
   const [loc1, setLoc1] = useState("all");
+  const [banco, setBanco] = useState("all");
   const [q, setQ] = useState("");
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
   const [tab, setTab] = useState("resumo");
   const [semPremioOnly, setSemPremioOnly] = useState(false);
 
   useEffect(() => {
-    document.body.style.overflow = filtersOpen ? "hidden" : "";
+    document.body.style.overflow = filtersOpen || addOpen ? "hidden" : "";
     return () => {
       document.body.style.overflow = "";
     };
-  }, [filtersOpen]);
+  }, [filtersOpen, addOpen]);
 
   const baseFiltered = useMemo(() => {
     if (!data?.vehicles) return [];
@@ -120,6 +131,7 @@ export default function App() {
       if (month !== "all" && v.monthKey !== month) return false;
       if (assessoria !== "all" && v.assessoria !== assessoria) return false;
       if (loc1 !== "all" && v.loc1 !== loc1) return false;
+      if (banco !== "all" && v.banco !== banco) return false;
       if (q.trim()) {
         const needle = q.trim().toUpperCase();
         const hay = `${v.placa} ${v.banco} ${v.contato} ${v.assessoria}`.toUpperCase();
@@ -127,7 +139,7 @@ export default function App() {
       }
       return true;
     });
-  }, [data, month, assessoria, loc1, q]);
+  }, [data, month, assessoria, loc1, banco, q]);
 
   const filtered = useMemo(
     () => (semPremioOnly ? baseFiltered.filter((v) => v.premio == null) : baseFiltered),
@@ -180,7 +192,7 @@ export default function App() {
   }, [filtered]);
 
   const activeFilterCount =
-    [month, assessoria, loc1].filter((v) => v !== "all").length +
+    [month, assessoria, loc1, banco].filter((v) => v !== "all").length +
     (q.trim() ? 1 : 0) +
     (semPremioOnly ? 1 : 0);
 
@@ -188,6 +200,7 @@ export default function App() {
     setMonth("all");
     setAssessoria("all");
     setLoc1("all");
+    setBanco("all");
     setQ("");
     setSemPremioOnly(false);
   };
@@ -276,6 +289,17 @@ export default function App() {
         </select>
       </div>
       <div className="filter">
+        <label htmlFor="banco">Banco</label>
+        <select id="banco" value={banco} onChange={(e) => setBanco(e.target.value)}>
+          <option value="all">Todos</option>
+          {(data?.filters?.bancos || []).map((name) => (
+            <option key={name} value={name}>
+              {name}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="filter">
         <label htmlFor="q">Busca</label>
         <input
           id="q"
@@ -299,6 +323,14 @@ export default function App() {
             <p className="brand-sub hide-mobile">Controle de Diligências</p>
           </div>
           <div className="header-actions">
+            <button
+              type="button"
+              className="icon-btn"
+              aria-label="Adicionar veículo"
+              onClick={() => setAddOpen(true)}
+            >
+              <IconPlus />
+            </button>
             <button
               type="button"
               className="icon-btn"
@@ -701,6 +733,16 @@ export default function App() {
           </div>
         </div>
       )}
+
+      <AddVehicleSheet
+        open={addOpen}
+        onClose={() => setAddOpen(false)}
+        filters={data?.filters}
+        onSaved={async () => {
+          await reload({ refresh: true });
+          setTab("veiculos");
+        }}
+      />
     </div>
   );
 }
