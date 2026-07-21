@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Bar,
   BarChart,
@@ -33,6 +33,61 @@ function SkeletonBlock({ className = "" }) {
   return <div className={`skeleton ${className}`} aria-hidden="true" />;
 }
 
+function IconHome() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        fill="currentColor"
+        d="M12 3.2 3.5 10.2V21h6.2v-6.1h4.6V21h6.2V10.2L12 3.2Z"
+      />
+    </svg>
+  );
+}
+
+function IconCars() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        fill="currentColor"
+        d="M5.2 16.5h13.6l.9-3.2H4.3l.9 3.2Zm13.1-8.2-.8-2.3c-.2-.7-.9-1.2-1.6-1.2H8.1c-.7 0-1.4.5-1.6 1.2l-.8 2.3H3.5v1.6h17V8.3h-2.2ZM7.4 14.1a1.1 1.1 0 1 0 0-2.2 1.1 1.1 0 0 0 0 2.2Zm9.2 0a1.1 1.1 0 1 0 0-2.2 1.1 1.1 0 0 0 0 2.2Z"
+      />
+    </svg>
+  );
+}
+
+function IconChart() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        fill="currentColor"
+        d="M4 19.5h16v1.6H4v-1.6Zm2.2-3.1h2.2V9.2H6.2v7.2Zm4.7 0h2.2V5.8h-2.2v10.6Zm4.7 0h2.2v-5.3h-2.2v5.3Z"
+      />
+    </svg>
+  );
+}
+
+function IconFilter() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        fill="currentColor"
+        d="M4 6.2h16v1.7H4V6.2Zm3 5h10v1.7H7v-1.7Zm2.5 5h5v1.7h-5v-1.7Z"
+      />
+    </svg>
+  );
+}
+
+function IconRefresh() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        fill="currentColor"
+        d="M17.7 6.3A7.8 7.8 0 0 0 5.4 8.1L4 6.7V12h5.3L7.5 10.2a5.6 5.6 0 1 1 1.3 6.5l-1.3 1.3A7.4 7.4 0 1 0 17.7 6.3Z"
+      />
+    </svg>
+  );
+}
+
 export default function App() {
   const { data, loading, error, reload } = useDashboard();
   const [month, setMonth] = useState("all");
@@ -40,6 +95,14 @@ export default function App() {
   const [loc1, setLoc1] = useState("all");
   const [q, setQ] = useState("");
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [tab, setTab] = useState("resumo");
+
+  useEffect(() => {
+    document.body.style.overflow = filtersOpen ? "hidden" : "";
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [filtersOpen]);
 
   const filtered = useMemo(() => {
     if (!data?.vehicles) return [];
@@ -99,26 +162,22 @@ export default function App() {
     setQ("");
   };
 
+  const alertCount = data?.alerts?.length || 0;
+
   if (loading && !data) {
     return (
-      <div className="app">
-        <header className="topbar">
-          <div className="brand">
-            <div className="brand-mark">
-              GPS <span>BA</span>
-            </div>
-            <p className="brand-sub">Carregando controle de diligências…</p>
+      <div className="app app-shell">
+        <header className="app-header">
+          <div className="brand-mark">
+            GPS <span>BA</span>
           </div>
         </header>
-        <div className="kpi-grid">
-          {[1, 2, 3, 4].map((i) => (
+        <div className="kpi-scroll">
+          {[1, 2, 3].map((i) => (
             <SkeletonBlock key={i} className="skeleton-kpi" />
           ))}
         </div>
-        <div className="panel-grid">
-          <SkeletonBlock className="skeleton-panel" />
-          <SkeletonBlock className="skeleton-panel" />
-        </div>
+        <SkeletonBlock className="skeleton-panel" />
       </div>
     );
   }
@@ -130,11 +189,7 @@ export default function App() {
           <p className="state-eyebrow">Conexão</p>
           <h1>Não foi possível carregar os dados</h1>
           <p className="state-body">{error}</p>
-          <p className="state-hint">
-            Local: <code>cd google-sheets && npm run api</code>. Na Vercel: confira as
-            variáveis de ambiente.
-          </p>
-          <button className="btn btn-primary" type="button" onClick={() => reload()}>
+          <button className="btn btn-primary btn-block" type="button" onClick={() => reload()}>
             Tentar de novo
           </button>
         </div>
@@ -142,276 +197,385 @@ export default function App() {
     );
   }
 
-  const alertPreview = (data?.alerts || []).slice(0, 5);
+  const filtersForm = (
+    <>
+      <div className="filter">
+        <label htmlFor="month">Mês</label>
+        <select id="month" value={month} onChange={(e) => setMonth(e.target.value)}>
+          <option value="all">Todos</option>
+          {(data?.filters?.months || []).map((m) => (
+            <option key={m.key} value={m.key}>
+              {m.label}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="filter">
+        <label htmlFor="assessoria">Assessoria</label>
+        <select
+          id="assessoria"
+          value={assessoria}
+          onChange={(e) => setAssessoria(e.target.value)}
+        >
+          <option value="all">Todas</option>
+          {(data?.filters?.assessorias || []).map((name) => (
+            <option key={name} value={name}>
+              {name}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="filter">
+        <label htmlFor="loc1">Localizador</label>
+        <select id="loc1" value={loc1} onChange={(e) => setLoc1(e.target.value)}>
+          <option value="all">Todos</option>
+          {(data?.filters?.localizadores || []).map((name) => (
+            <option key={name} value={name}>
+              {name}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="filter">
+        <label htmlFor="q">Busca</label>
+        <input
+          id="q"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Placa, banco, contato…"
+          enterKeyHint="search"
+        />
+      </div>
+    </>
+  );
 
   return (
-    <div className="app">
-      <header className="topbar">
-        <div className="brand">
-          <div className="brand-mark">
-            GPS <span>BA</span>
+    <div className="app app-shell">
+      <header className="app-header">
+        <div className="header-row">
+          <div>
+            <div className="brand-mark">
+              GPS <span>BA</span>
+            </div>
+            <p className="brand-sub hide-mobile">Controle de Diligências</p>
           </div>
-          <p className="brand-sub">Controle de Diligências · visão gerencial</p>
+          <div className="header-actions">
+            <button
+              type="button"
+              className="icon-btn"
+              aria-label="Filtros"
+              onClick={() => setFiltersOpen(true)}
+            >
+              <IconFilter />
+              {activeFilterCount > 0 && <span className="badge">{activeFilterCount}</span>}
+            </button>
+            <button
+              type="button"
+              className="icon-btn icon-btn-primary"
+              aria-label="Atualizar"
+              disabled={loading}
+              onClick={() => reload({ refresh: true })}
+            >
+              <IconRefresh />
+            </button>
+          </div>
         </div>
-        <div className="top-actions">
-          <span className="meta-chip hide-sm">
-            {data?.meta?.generatedAt
-              ? new Date(data.meta.generatedAt).toLocaleString("pt-BR")
-              : ""}
-          </span>
-          <button
-            className="btn btn-ghost hide-sm"
-            type="button"
-            onClick={() => reload()}
-            disabled={loading}
-          >
-            Cache
-          </button>
-          <button
-            className="btn btn-primary"
-            type="button"
-            onClick={() => reload({ refresh: true })}
-            disabled={loading}
-          >
-            {loading ? "Atualizando…" : "Atualizar"}
-          </button>
+
+        <div className="search-bar">
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Buscar placa, assessoria…"
+            enterKeyHint="search"
+            aria-label="Buscar"
+          />
         </div>
       </header>
 
-      {alertPreview.length > 0 && (
-        <div className="alerts" role="status">
-          {alertPreview.map((a, i) => (
-            <span
-              key={`${a.placa}-${a.type}-${i}`}
-              className={`alert ${a.type === "saldo-negativo" ? "danger" : ""}`}
-            >
-              <strong>{a.placa}</strong> {a.message}
-            </span>
-          ))}
-          {data.alerts.length > 5 && (
-            <span className="alert muted">+{data.alerts.length - 5}</span>
+      <main className={`tab-panels tab-${tab}`}>
+        <section className="filters desktop-filters desktop-only">{filtersForm}</section>
+
+        {/* RESUMO */}
+        <section className={`tab-panel ${tab === "resumo" ? "is-active" : ""}`}>
+          <div className="hero-saldo">
+            <p className="hero-label">Saldo do período</p>
+            <p className={`hero-value ${filteredTotals.saldo < 0 ? "negative" : "positive"}`}>
+              {formatBRL(filteredTotals.saldo)}
+            </p>
+            <p className="hero-meta">
+              {filteredTotals.veiculos} veículos
+              {activeFilterCount ? " · filtrado" : ""}
+              {alertCount ? ` · ${alertCount} alertas` : ""}
+            </p>
+          </div>
+
+          <div className="kpi-scroll" aria-label="Indicadores">
+            <article className="kpi-chip">
+              <span>Prêmio</span>
+              <strong>{formatBRL(filteredTotals.premio)}</strong>
+            </article>
+            <article className="kpi-chip">
+              <span>Despesas</span>
+              <strong>{formatBRL(filteredTotals.despesas)}</strong>
+            </article>
+            <article className="kpi-chip">
+              <span>Imposto</span>
+              <strong>{formatBRL(filteredTotals.imposto)}</strong>
+            </article>
+            <article className="kpi-chip">
+              <span>Sem prêmio</span>
+              <strong>{filteredTotals.semPremio}</strong>
+            </article>
+          </div>
+
+          <div className="panel">
+            <div className="panel-head">
+              <h2>Prêmio por mês</h2>
+            </div>
+            <div className="chart-box">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={monthChart} margin={{ top: 8, right: 4, left: -8, bottom: 0 }}>
+                  <CartesianGrid stroke="rgba(232,220,196,0.08)" vertical={false} />
+                  <XAxis
+                    dataKey="label"
+                    stroke="#9aa6b5"
+                    tick={{ fill: "#9aa6b5", fontSize: 11 }}
+                    interval="preserveStartEnd"
+                  />
+                  <YAxis
+                    stroke="#9aa6b5"
+                    width={32}
+                    tick={{ fill: "#9aa6b5", fontSize: 11 }}
+                    tickFormatter={(v) => `${Math.round(v / 1000)}k`}
+                  />
+                  <Tooltip content={<ChartTooltip />} />
+                  <Bar dataKey="premio" name="Prêmio" radius={[6, 6, 0, 0]}>
+                    {monthChart.map((_, i) => (
+                      <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {alertCount > 0 && (
+            <div className="alert-list">
+              <h2>Atenção</h2>
+              {(data.alerts || []).slice(0, 4).map((a, i) => (
+                <div
+                  key={`${a.placa}-${a.type}-${i}`}
+                  className={`alert-row ${a.type === "saldo-negativo" ? "danger" : ""}`}
+                >
+                  <strong>{a.placa}</strong>
+                  <span>{a.message}</span>
+                </div>
+              ))}
+            </div>
           )}
-        </div>
-      )}
+        </section>
 
-      <div className="toolbar">
-        <button
-          type="button"
-          className="btn btn-ghost filters-toggle"
-          onClick={() => setFiltersOpen((o) => !o)}
-          aria-expanded={filtersOpen}
-        >
-          Filtros{activeFilterCount ? ` (${activeFilterCount})` : ""}
-        </button>
-        {activeFilterCount > 0 && (
-          <button type="button" className="btn btn-ghost" onClick={clearFilters}>
-            Limpar
-          </button>
-        )}
-        <div className="toolbar-spacer" />
-        <span className="result-count">
-          {filtered.length} veículo{filtered.length === 1 ? "" : "s"}
-        </span>
-      </div>
-
-      <section className={`filters ${filtersOpen ? "is-open" : ""}`}>
-        <div className="filter">
-          <label htmlFor="month">Mês</label>
-          <select id="month" value={month} onChange={(e) => setMonth(e.target.value)}>
-            <option value="all">Todos</option>
-            {(data?.filters?.months || []).map((m) => (
-              <option key={m.key} value={m.key}>
-                {m.label}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="filter">
-          <label htmlFor="assessoria">Assessoria</label>
-          <select
-            id="assessoria"
-            value={assessoria}
-            onChange={(e) => setAssessoria(e.target.value)}
-          >
-            <option value="all">Todas</option>
-            {(data?.filters?.assessorias || []).map((name) => (
-              <option key={name} value={name}>
-                {name}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="filter">
-          <label htmlFor="loc1">Localizador</label>
-          <select id="loc1" value={loc1} onChange={(e) => setLoc1(e.target.value)}>
-            <option value="all">Todos</option>
-            {(data?.filters?.localizadores || []).map((name) => (
-              <option key={name} value={name}>
-                {name}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="filter">
-          <label htmlFor="q">Busca</label>
-          <input
-            id="q"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Placa, banco, contato…"
-            enterKeyHint="search"
-          />
-        </div>
-      </section>
-
-      <section className="kpi-grid" aria-label="Indicadores">
-        <article className="kpi">
-          <div className="kpi-label">Veículos</div>
-          <div className="kpi-value">{filteredTotals.veiculos}</div>
-          <div className="kpi-hint">{filteredTotals.semPremio} sem prêmio</div>
-        </article>
-        <article className="kpi">
-          <div className="kpi-label">Prêmio</div>
-          <div className="kpi-value">{formatBRL(filteredTotals.premio)}</div>
-          <div className="kpi-hint">Despesas {formatBRL(filteredTotals.despesas)}</div>
-        </article>
-        <article className="kpi">
-          <div className="kpi-label">Imposto</div>
-          <div className="kpi-value">{formatBRL(filteredTotals.imposto)}</div>
-          <div className="kpi-hint">13% sobre prêmio</div>
-        </article>
-        <article className="kpi kpi-accent">
-          <div className="kpi-label">Saldo</div>
-          <div
-            className={`kpi-value ${filteredTotals.saldo < 0 ? "negative" : "positive"}`}
-          >
-            {formatBRL(filteredTotals.saldo)}
+        {/* VEÍCULOS */}
+        <section className={`tab-panel ${tab === "veiculos" ? "is-active" : ""}`}>
+          <div className="list-meta">
+            <h2>Veículos</h2>
+            <span>{filtered.length}</span>
           </div>
-          <div className="kpi-hint">Após despesas e imposto</div>
-        </article>
-      </section>
 
-      <section className="panel-grid">
-        <div className="panel">
-          <div className="panel-head">
-            <h2>Prêmio por mês</h2>
-          </div>
-          <div className="chart-box">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={monthChart} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                <CartesianGrid stroke="rgba(232,220,196,0.08)" vertical={false} />
-                <XAxis
-                  dataKey="label"
-                  stroke="#9aa6b5"
-                  tick={{ fill: "#9aa6b5", fontSize: 11 }}
-                  interval="preserveStartEnd"
-                />
-                <YAxis
-                  stroke="#9aa6b5"
-                  width={36}
-                  tick={{ fill: "#9aa6b5", fontSize: 11 }}
-                  tickFormatter={(v) => `${Math.round(v / 1000)}k`}
-                />
-                <Tooltip content={<ChartTooltip />} />
-                <Bar dataKey="premio" name="Prêmio" radius={[6, 6, 0, 0]}>
-                  {monthChart.map((_, i) => (
-                    <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        <div className="panel">
-          <div className="panel-head">
-            <h2>Top assessorias</h2>
-          </div>
-          <div className="chart-box">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                data={assessoriaChart}
-                layout="vertical"
-                margin={{ top: 8, right: 12, left: 4, bottom: 0 }}
-              >
-                <CartesianGrid stroke="rgba(232,220,196,0.08)" horizontal={false} />
-                <XAxis
-                  type="number"
-                  stroke="#9aa6b5"
-                  tick={{ fill: "#9aa6b5", fontSize: 11 }}
-                  tickFormatter={(v) => `${Math.round(v / 1000)}k`}
-                />
-                <YAxis
-                  type="category"
-                  dataKey="key"
-                  width={88}
-                  stroke="#9aa6b5"
-                  tick={{ fill: "#9aa6b5", fontSize: 10 }}
-                />
-                <Tooltip content={<ChartTooltip />} />
-                <Bar dataKey="premio" name="Prêmio" fill="#d4a017" radius={[0, 6, 6, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      </section>
-
-      <section className="table-section">
-        <div className="panel-head table-head">
-          <h2>Veículos</h2>
-          <span className="meta-chip hide-sm">Scroll horizontal no celular</span>
-        </div>
-        <div className="table-wrap" tabIndex={0}>
-          <table>
-            <thead>
-              <tr>
-                <th>Data</th>
-                <th>Placa</th>
-                <th>Loc</th>
-                <th>Assessoria</th>
-                <th>Banco</th>
-                <th>Contato</th>
-                <th className="num">Prêmio</th>
-                <th className="num">Imposto</th>
-                <th className="num">Saldo</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((v) => (
-                <tr key={`${v.placa}-${v.data || ""}`}>
-                  <td>{formatDate(v.data)}</td>
-                  <td className="placa">{v.placa}</td>
-                  <td>{v.loc1 || "—"}</td>
-                  <td>{v.assessoria || "—"}</td>
-                  <td>{v.banco || "—"}</td>
-                  <td>{v.contato || "—"}</td>
-                  <td className="num">{formatBRL(v.premio)}</td>
-                  <td className="num">{formatBRL(v.imposto)}</td>
-                  <td
-                    className={`num ${
-                      v.saldo == null ? "" : v.saldo < 0 ? "saldo-neg" : "saldo-pos"
+          <div className="vehicle-cards">
+            {filtered.map((v) => (
+              <article key={`${v.placa}-${v.data || ""}`} className="vehicle-card">
+                <div className="vehicle-card-top">
+                  <div>
+                    <p className="placa">{v.placa}</p>
+                    <p className="vehicle-sub">
+                      {formatDate(v.data)} · {v.loc1 || "Sem loc"}
+                    </p>
+                  </div>
+                  <p
+                    className={`vehicle-saldo ${
+                      v.saldo == null ? "" : v.saldo < 0 ? "negative" : "positive"
                     }`}
                   >
                     {formatBRL(v.saldo)}
-                  </td>
-                </tr>
-              ))}
-              {filtered.length === 0 && (
-                <tr>
-                  <td colSpan={9} className="empty-row">
-                    Nenhum veículo com os filtros atuais.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
+                  </p>
+                </div>
+                <div className="vehicle-grid">
+                  <div>
+                    <span>Assessoria</span>
+                    <strong>{v.assessoria || "—"}</strong>
+                  </div>
+                  <div>
+                    <span>Prêmio</span>
+                    <strong>{formatBRL(v.premio)}</strong>
+                  </div>
+                  <div>
+                    <span>Banco</span>
+                    <strong>{v.banco || "—"}</strong>
+                  </div>
+                  <div>
+                    <span>Contato</span>
+                    <strong>{v.contato || "—"}</strong>
+                  </div>
+                </div>
+              </article>
+            ))}
+            {filtered.length === 0 && (
+              <div className="empty-state">Nenhum veículo com os filtros atuais.</div>
+            )}
+          </div>
 
-      <footer className="footer">
-        <span>GPS BA · planilha como fonte da verdade</span>
-        <span className="hide-sm">{data?.totals?.veiculos ?? 0} registros na base</span>
-      </footer>
+          {/* Desktop table */}
+          <div className="table-wrap desktop-only" tabIndex={0}>
+            <table>
+              <thead>
+                <tr>
+                  <th>Data</th>
+                  <th>Placa</th>
+                  <th>Loc</th>
+                  <th>Assessoria</th>
+                  <th>Banco</th>
+                  <th>Contato</th>
+                  <th className="num">Prêmio</th>
+                  <th className="num">Imposto</th>
+                  <th className="num">Saldo</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((v) => (
+                  <tr key={`t-${v.placa}-${v.data || ""}`}>
+                    <td>{formatDate(v.data)}</td>
+                    <td className="placa">{v.placa}</td>
+                    <td>{v.loc1 || "—"}</td>
+                    <td>{v.assessoria || "—"}</td>
+                    <td>{v.banco || "—"}</td>
+                    <td>{v.contato || "—"}</td>
+                    <td className="num">{formatBRL(v.premio)}</td>
+                    <td className="num">{formatBRL(v.imposto)}</td>
+                    <td
+                      className={`num ${
+                        v.saldo == null ? "" : v.saldo < 0 ? "saldo-neg" : "saldo-pos"
+                      }`}
+                    >
+                      {formatBRL(v.saldo)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        {/* INSIGHTS */}
+        <section className={`tab-panel ${tab === "insights" ? "is-active" : ""}`}>
+          <div className="panel">
+            <div className="panel-head">
+              <h2>Top assessorias</h2>
+            </div>
+            <div className="chart-box chart-box-tall">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={assessoriaChart}
+                  layout="vertical"
+                  margin={{ top: 8, right: 12, left: 4, bottom: 0 }}
+                >
+                  <CartesianGrid stroke="rgba(232,220,196,0.08)" horizontal={false} />
+                  <XAxis
+                    type="number"
+                    stroke="#9aa6b5"
+                    tick={{ fill: "#9aa6b5", fontSize: 11 }}
+                    tickFormatter={(v) => `${Math.round(v / 1000)}k`}
+                  />
+                  <YAxis
+                    type="category"
+                    dataKey="key"
+                    width={88}
+                    stroke="#9aa6b5"
+                    tick={{ fill: "#9aa6b5", fontSize: 10 }}
+                  />
+                  <Tooltip content={<ChartTooltip />} />
+                  <Bar dataKey="premio" name="Prêmio" fill="#d4a017" radius={[0, 6, 6, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          <div className="rank-list">
+            <h2>Ranking</h2>
+            {assessoriaChart.map((item, index) => (
+              <div key={item.key} className="rank-row">
+                <span className="rank-pos">{index + 1}</span>
+                <div className="rank-info">
+                  <strong>{item.key}</strong>
+                  <span>{item.veiculos} veíc.</span>
+                </div>
+                <strong className="rank-value">{formatBRL(item.premio)}</strong>
+              </div>
+            ))}
+          </div>
+        </section>
+      </main>
+
+      {/* Mobile bottom nav */}
+      <nav className="bottom-nav" aria-label="Navegação principal">
+        <button
+          type="button"
+          className={tab === "resumo" ? "is-active" : ""}
+          onClick={() => setTab("resumo")}
+        >
+          <IconHome />
+          <span>Resumo</span>
+        </button>
+        <button
+          type="button"
+          className={tab === "veiculos" ? "is-active" : ""}
+          onClick={() => setTab("veiculos")}
+        >
+          <IconCars />
+          <span>Veículos</span>
+        </button>
+        <button
+          type="button"
+          className={tab === "insights" ? "is-active" : ""}
+          onClick={() => setTab("insights")}
+        >
+          <IconChart />
+          <span>Insights</span>
+        </button>
+      </nav>
+
+      {/* Filter bottom sheet */}
+      {filtersOpen && (
+        <div className="sheet-root" role="dialog" aria-modal="true" aria-label="Filtros">
+          <button
+            type="button"
+            className="sheet-backdrop"
+            aria-label="Fechar filtros"
+            onClick={() => setFiltersOpen(false)}
+          />
+          <div className="sheet">
+            <div className="sheet-handle" />
+            <div className="sheet-head">
+              <h2>Filtros</h2>
+              {activeFilterCount > 0 && (
+                <button type="button" className="btn btn-ghost" onClick={clearFilters}>
+                  Limpar
+                </button>
+              )}
+            </div>
+            <div className="sheet-body">{filtersForm}</div>
+            <div className="sheet-foot">
+              <button
+                type="button"
+                className="btn btn-primary btn-block"
+                onClick={() => setFiltersOpen(false)}
+              >
+                Ver {filtered.length} resultado{filtered.length === 1 ? "" : "s"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
