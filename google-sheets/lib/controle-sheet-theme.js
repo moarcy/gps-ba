@@ -170,12 +170,20 @@ export function styleControleDataRow(row, rowNumber, { zebra = false } = {}) {
   for (let col = 1; col <= DATA_COLUMNS; col++) {
     const cell = row.getCell(col);
     const isCurrency = CURRENCY_COLS.includes(col);
+    const isDespesa = DESPESAS_COLS.includes(col);
 
     cell.font = {
       name: "Arial",
       size: 11,
-      color: { argb: col === 13 ? COLORS.saldoText : "FF111827" },
-      bold: col === 13,
+      color: {
+        argb:
+          col === 13
+            ? COLORS.saldoText
+            : isDespesa
+              ? COLORS.despesasText
+              : "FF111827",
+      },
+      bold: col === 13 || isDespesa,
     };
     cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: bg } };
     cell.border = thinBorder();

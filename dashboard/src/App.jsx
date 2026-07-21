@@ -13,8 +13,7 @@ import { useDashboard } from "./hooks/useDashboard";
 import { formatBRL, formatDate } from "./lib/format";
 import "./index.css";
 
-const CHART_MUTED = "#2e3640";
-const CHART_ACCENT = ["#8a96a3", "#6b7885"];
+const CHART_PALETTE = ["#5b8def", "#4aa3a0", "#c4a35a", "#8b7ec8", "#6f9b84", "#b87a7a"];
 
 function highlightIndex(rows, valueKey = "premio") {
   if (!rows.length) return -1;
@@ -106,6 +105,7 @@ export default function App() {
   const [q, setQ] = useState("");
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [tab, setTab] = useState("resumo");
+  const [semPremioOnly, setSemPremioOnly] = useState(false);
 
   useEffect(() => {
     document.body.style.overflow = filtersOpen ? "hidden" : "";
@@ -114,7 +114,7 @@ export default function App() {
     };
   }, [filtersOpen]);
 
-  const filtered = useMemo(() => {
+  const baseFiltered = useMemo(() => {
     if (!data?.vehicles) return [];
     return data.vehicles.filter((v) => {
       if (month !== "all" && v.monthKey !== month) return false;
@@ -128,6 +128,21 @@ export default function App() {
       return true;
     });
   }, [data, month, assessoria, loc1, q]);
+
+  const filtered = useMemo(
+    () => (semPremioOnly ? baseFiltered.filter((v) => v.premio == null) : baseFiltered),
+    [baseFiltered, semPremioOnly],
+  );
+
+  const semPremioVehicles = useMemo(
+    () => baseFiltered.filter((v) => v.premio == null),
+    [baseFiltered],
+  );
+
+  const otherAlerts = useMemo(
+    () => (data?.alerts || []).filter((a) => a.type !== "sem-premio"),
+    [data],
+  );
 
   const filteredTotals = useMemo(() => {
     const withPremio = filtered.filter((v) => v.premio != null);
@@ -165,20 +180,28 @@ export default function App() {
   }, [filtered]);
 
   const activeFilterCount =
-    [month, assessoria, loc1].filter((v) => v !== "all").length + (q.trim() ? 1 : 0);
+    [month, assessoria, loc1].filter((v) => v !== "all").length +
+    (q.trim() ? 1 : 0) +
+    (semPremioOnly ? 1 : 0);
 
   const clearFilters = () => {
     setMonth("all");
     setAssessoria("all");
     setLoc1("all");
     setQ("");
+    setSemPremioOnly(false);
+  };
+
+  const openSemPremio = () => {
+    setSemPremioOnly(true);
+    setTab("veiculos");
   };
 
   const monthHighlight = highlightIndex(monthChart);
   const assessoriaHighlight = highlightIndex(assessoriaChart);
   const assessoriaMax = assessoriaChart[0]?.premio || 1;
 
-  const alertCount = data?.alerts?.length || 0;
+  const alertCount = otherAlerts.length;
 
   if (loading && !data) {
     return (
@@ -328,19 +351,25 @@ export default function App() {
           <div className="kpi-scroll" aria-label="Indicadores">
             <article className="kpi-chip">
               <span>Prêmio</span>
-              <strong>{formatBRL(filteredTotals.premio)}</strong>
+              <strong className="num-premio">{formatBRL(filteredTotals.premio)}</strong>
             </article>
             <article className="kpi-chip">
               <span>Despesas</span>
-              <strong className="despesa">{formatBRL(filteredTotals.despesas)}</strong>
+              <strong className="num-despesa">{formatBRL(filteredTotals.despesas)}</strong>
             </article>
             <article className="kpi-chip">
               <span>Imposto</span>
-              <strong>{formatBRL(filteredTotals.imposto)}</strong>
+              <strong className="num-imposto">{formatBRL(filteredTotals.imposto)}</strong>
             </article>
-            <article className="kpi-chip">
+            <article
+              className="kpi-chip kpi-chip-action"
+              onClick={openSemPremio}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => e.key === "Enter" && openSemPremio()}
+            >
               <span>Sem prêmio</span>
-              <strong>{filteredTotals.semPremio}</strong>
+              <strong className="num-alerta">{semPremioVehicles.length}</strong>
             </article>
           </div>
 
@@ -376,7 +405,12 @@ export default function App() {
                     {monthChart.map((_, i) => (
                       <Cell
                         key={i}
-                        fill={i === monthHighlight ? CHART_ACCENT[0] : CHART_MUTED}
+                        fill={
+                          i === monthHighlight
+                            ? CHART_PALETTE[0]
+                            : CHART_PALETTE[(i % (CHART_PALETTE.length - 1)) + 1]
+                        }
+                        fillOpacity={i === monthHighlight ? 1 : 0.72}
                       />
                     ))}
                   </Bar>
@@ -384,6 +418,37 @@ export default function App() {
               </ResponsiveContainer>
             </div>
           </div>
+
+          {semPremioVehicles.length > 0 && (
+            <div className="sem-premio-list" id="sem-premio">
+              <div className="panel-head">
+                <h2>Sem prêmio</h2>
+                <button type="button" className="link-more" onClick={openSemPremio}>
+                  Ver todos ›
+                </button>
+              </div>
+              <p className="section-hint">
+                {semPremioVehicles.length} veículo
+                {semPremioVehicles.length === 1 ? "" : "s"} sem valor de prêmio no período
+              </p>
+              {semPremioVehicles.slice(0, 6).map((v) => (
+                <div key={`sp-${v.placa}-${v.data || ""}`} className="sem-premio-row">
+                  <div>
+                    <strong className="placa">{v.placa}</strong>
+                    <span>
+                      {formatDate(v.data)} · {v.assessoria || "Sem assessoria"}
+                    </span>
+                  </div>
+                  <span className="sem-premio-meta">{v.loc1 || "Sem loc"}</span>
+                </div>
+              ))}
+              {semPremioVehicles.length > 6 && (
+                <button type="button" className="btn btn-ghost btn-block" onClick={openSemPremio}>
+                  +{semPremioVehicles.length - 6} restantes
+                </button>
+              )}
+            </div>
+          )}
 
           {alertCount > 0 && (
             <div className="alert-list">
@@ -393,7 +458,7 @@ export default function App() {
                   Ver veículos ›
                 </button>
               </div>
-              {(data.alerts || []).slice(0, 4).map((a, i) => (
+              {otherAlerts.slice(0, 4).map((a, i) => (
                 <div
                   key={`${a.placa}-${a.type}-${i}`}
                   className={`alert-row ${a.type === "saldo-negativo" ? "danger" : ""}`}
@@ -409,10 +474,18 @@ export default function App() {
         {/* VEÍCULOS */}
         <section className={`tab-panel ${tab === "veiculos" ? "is-active" : ""}`}>
           <div className="list-meta">
-            <h2>Veículos</h2>
+            <h2>{semPremioOnly ? "Sem prêmio" : "Veículos"}</h2>
             <span>{filtered.length}</span>
           </div>
 
+          {semPremioOnly && (
+            <div className="filter-banner">
+              <span>Mostrando apenas veículos sem prêmio</span>
+              <button type="button" className="link-more" onClick={() => setSemPremioOnly(false)}>
+                Limpar
+              </button>
+            </div>
+          )}
           <div className="vehicle-cards">
             {filtered.map((v) => (
               <article key={`${v.placa}-${v.data || ""}`} className="vehicle-card">
@@ -438,7 +511,7 @@ export default function App() {
                   </div>
                   <div>
                     <span>Prêmio</span>
-                    <strong>{formatBRL(v.premio)}</strong>
+                    <strong className="num-premio">{formatBRL(v.premio)}</strong>
                   </div>
                   <div>
                     <span>Banco</span>
@@ -481,8 +554,8 @@ export default function App() {
                     <td>{v.assessoria || "—"}</td>
                     <td>{v.banco || "—"}</td>
                     <td>{v.contato || "—"}</td>
-                    <td className="num">{formatBRL(v.premio)}</td>
-                    <td className="num">{formatBRL(v.imposto)}</td>
+                    <td className="num num-premio">{formatBRL(v.premio)}</td>
+                    <td className="num num-imposto">{formatBRL(v.imposto)}</td>
                     <td
                       className={`num ${
                         v.saldo == null ? "" : v.saldo < 0 ? "saldo-neg" : "saldo-pos"
@@ -534,7 +607,8 @@ export default function App() {
                     {assessoriaChart.map((_, i) => (
                       <Cell
                         key={i}
-                        fill={i === assessoriaHighlight ? CHART_ACCENT[0] : CHART_MUTED}
+                        fill={CHART_PALETTE[i % CHART_PALETTE.length]}
+                        fillOpacity={i === assessoriaHighlight ? 1 : 0.7}
                       />
                     ))}
                   </Bar>
@@ -560,7 +634,7 @@ export default function App() {
                   </div>
                   <span>{item.veiculos} veíc.</span>
                 </div>
-                <strong className="rank-value">{formatBRL(item.premio)}</strong>
+                <strong className="rank-value num-premio">{formatBRL(item.premio)}</strong>
               </div>
             ))}
           </div>

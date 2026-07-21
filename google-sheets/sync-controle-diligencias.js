@@ -257,10 +257,12 @@ export function writeControleSheet(worksheet, records) {
   const dataEnd = DATA_START + DATA_CAPACITY - 1;
 
   const writeVehicleFormulas = (row, rowNumber) => {
+    // Imposto só com prêmio. Apoio/Loc/Guincho são sempre despesas (com ou sem prêmio).
+    // Saldo = N(Prêmio) − despesas − N(Imposto); fica negativo se só houver despesas.
     setFormula(row.getCell(12), `IF(G${rowNumber}="","",G${rowNumber}*13%)`);
     setFormula(
       row.getCell(13),
-      `IF(G${rowNumber}="","",G${rowNumber}-I${rowNumber}-J${rowNumber}-K${rowNumber}-L${rowNumber})`,
+      `IF(COUNTA(G${rowNumber},I${rowNumber},J${rowNumber},K${rowNumber})=0,"",N(G${rowNumber})-N(I${rowNumber})-N(J${rowNumber})-N(K${rowNumber})-N(L${rowNumber}))`,
     );
   };
 

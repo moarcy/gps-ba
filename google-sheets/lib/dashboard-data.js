@@ -35,12 +35,20 @@ function money(n) {
 }
 
 function computeRow(record) {
+  const hasPremio = record.premio != null;
+  // Apoio / Loc II / Guincho são sempre despesas, com ou sem prêmio.
+  const hasDespesa =
+    record.apoio != null || record.loc2 != null || record.guincho != null;
   const premio = Number(record.premio) || 0;
   const apoio = Number(record.apoio) || 0;
   const loc2 = Number(record.loc2) || 0;
   const guincho = Number(record.guincho) || 0;
-  const imposto = record.premio == null ? 0 : money(premio * 0.13);
-  const saldo = record.premio == null ? null : money(premio - apoio - loc2 - guincho - imposto);
+  const despesas = apoio + loc2 + guincho;
+  const imposto = hasPremio ? money(premio * 0.13) : null;
+  const saldo =
+    hasPremio || hasDespesa
+      ? money(premio - despesas - (imposto || 0))
+      : null;
 
   return {
     placa: record.placa,
@@ -51,11 +59,12 @@ function computeRow(record) {
     assessoria: record.assessoria || "",
     contato: record.contato || "",
     nfNr: record.nfNr || "",
-    premio: record.premio == null ? null : money(premio),
+    premio: hasPremio ? money(premio) : null,
     apoio: record.apoio == null ? null : money(apoio),
     loc2: record.loc2 == null ? null : money(loc2),
     guincho: record.guincho == null ? null : money(guincho),
-    imposto: record.premio == null ? null : imposto,
+    despesas: hasDespesa ? money(despesas) : null,
+    imposto,
     saldo,
   };
 }
@@ -82,12 +91,13 @@ function aggregateBy(rows, keyFn) {
     if (row.premio == null) bucket.semPremio += 1;
     else {
       bucket.premio += row.premio;
-      bucket.apoio += row.apoio || 0;
-      bucket.loc2 += row.loc2 || 0;
-      bucket.guincho += row.guincho || 0;
       bucket.imposto += row.imposto || 0;
-      bucket.saldo += row.saldo || 0;
     }
+    // Despesas entram sempre (independente de prêmio).
+    bucket.apoio += row.apoio || 0;
+    bucket.loc2 += row.loc2 || 0;
+    bucket.guincho += row.guincho || 0;
+    if (row.saldo != null) bucket.saldo += row.saldo;
   }
 
   return [...map.values()]
@@ -121,6 +131,7 @@ export function buildDashboardPayload(records, { source = "gestor" } = {}) {
   const byLoc1 = aggregateBy(vehicles, (r) => r.loc1);
 
   const withPremio = vehicles.filter((v) => v.premio != null);
+  const withSaldo = vehicles.filter((v) => v.saldo != null);
   const totals = {
     veiculos: vehicles.length,
     comPremio: withPremio.length,
@@ -128,11 +139,11 @@ export function buildDashboardPayload(records, { source = "gestor" } = {}) {
     semData: vehicles.filter((v) => v.monthKey === "sem-data").length,
     saldoNegativo: vehicles.filter((v) => v.saldo != null && v.saldo < 0).length,
     premio: money(withPremio.reduce((a, v) => a + (v.premio || 0), 0)),
-    apoio: money(withPremio.reduce((a, v) => a + (v.apoio || 0), 0)),
-    loc2: money(withPremio.reduce((a, v) => a + (v.loc2 || 0), 0)),
-    guincho: money(withPremio.reduce((a, v) => a + (v.guincho || 0), 0)),
+    apoio: money(vehicles.reduce((a, v) => a + (v.apoio || 0), 0)),
+    loc2: money(vehicles.reduce((a, v) => a + (v.loc2 || 0), 0)),
+    guincho: money(vehicles.reduce((a, v) => a + (v.guincho || 0), 0)),
     imposto: money(withPremio.reduce((a, v) => a + (v.imposto || 0), 0)),
-    saldo: money(withPremio.reduce((a, v) => a + (v.saldo || 0), 0)),
+    saldo: money(withSaldo.reduce((a, v) => a + (v.saldo || 0), 0)),
   };
 
   const alerts = [];
