@@ -333,7 +333,7 @@ export default function App() {
             </button>
             <button
               type="button"
-              className="icon-btn"
+              className="icon-btn icon-btn-filters"
               aria-label="Filtros"
               onClick={() => setFiltersOpen(true)}
             >
@@ -703,7 +703,7 @@ export default function App() {
 
       {/* Filter bottom sheet */}
       {filtersOpen && (
-        <div className="sheet-root" role="dialog" aria-modal="true" aria-label="Filtros">
+        <div className="sheet-root mobile-sheet" role="dialog" aria-modal="true" aria-label="Filtros">
           <button
             type="button"
             className="sheet-backdrop"

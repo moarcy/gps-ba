@@ -957,7 +957,7 @@ th {
   }
 
   .bottom-nav,
-  .sheet-root {
+  .mobile-sheet {
     display: none !important;
   }
 
@@ -992,8 +992,25 @@ th {
     height: 260px;
   }
 
-  .header-actions .icon-btn:first-child {
+  .icon-btn-filters {
     display: none;
+  }
+
+  .sheet-root:not(.mobile-sheet) {
+    display: grid;
+    place-items: center;
+    padding: 24px;
+  }
+
+  .sheet-root:not(.mobile-sheet) .sheet {
+    position: relative;
+    left: auto;
+    right: auto;
+    bottom: auto;
+    width: min(520px, 100%);
+    max-height: min(88vh, 720px);
+    border-radius: 18px;
+    border-bottom: 1px solid var(--line);
   }
 }
 
