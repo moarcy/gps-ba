@@ -1,21 +1,22 @@
 :root {
-  --ink: #0b0f16;
-  --ink-2: #151b26;
-  --card: #171e2b;
-  --line: rgba(255, 255, 255, 0.06);
-  --sand: #f2eee8;
-  --sand-dim: rgba(242, 238, 232, 0.55);
-  --amber: #ff8a3d;
-  --amber-soft: rgba(255, 138, 61, 0.14);
-  --mint: #3dba8c;
-  --coral: #ff5c6a;
-  --radius: 22px;
-  --font-display: "Syne", sans-serif;
-  --font-body: "DM Sans", sans-serif;
+  --ink: #0f1419;
+  --ink-2: #171d24;
+  --card: #1a2129;
+  --line: rgba(197, 204, 212, 0.1);
+  --sand: #e8ecf0;
+  --sand-dim: rgba(232, 236, 240, 0.58);
+  --accent: #8a96a3;
+  --accent-soft: rgba(138, 150, 163, 0.16);
+  --accent-strong: #c5ccd4;
+  --mint: #6f9b84;
+  --coral: #b87a7a;
+  --radius: 18px;
+  --font-display: "IBM Plex Serif", "Georgia", serif;
+  --font-body: "IBM Plex Sans", "Segoe UI", sans-serif;
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --nav-h: 78px;
-  --shadow: 0 12px 28px rgba(0, 0, 0, 0.28);
+  --shadow: 0 8px 24px rgba(0, 0, 0, 0.32);
   color: var(--sand);
   background: var(--ink);
   font-family: var(--font-body);
@@ -36,10 +37,7 @@ body,
 }
 
 body {
-  background:
-    radial-gradient(ellipse 70% 40% at 85% -5%, rgba(255, 92, 106, 0.12), transparent 50%),
-    radial-gradient(ellipse 80% 45% at 8% -8%, rgba(255, 138, 61, 0.15), transparent 55%),
-    linear-gradient(180deg, #0b0f16 0%, #101722 52%, #0b0f16 100%);
+  background: linear-gradient(180deg, #0f1419 0%, #141a21 48%, #0f1419 100%);
   background-attachment: fixed;
 }
 
@@ -75,8 +73,8 @@ button:disabled {
   z-index: 20;
   margin: -12px -14px 14px;
   padding: calc(10px + var(--safe-top)) 14px 12px;
-  background: rgba(11, 15, 22, 0.86);
-  backdrop-filter: blur(16px);
+  background: rgba(15, 20, 25, 0.92);
+  backdrop-filter: blur(14px);
   border-bottom: 1px solid var(--line);
 }
 
@@ -89,23 +87,24 @@ button:disabled {
 
 .brand-mark {
   font-family: var(--font-display);
-  font-weight: 800;
-  font-size: 1.55rem;
-  letter-spacing: -0.03em;
+  font-weight: 600;
+  font-size: 1.45rem;
+  letter-spacing: -0.02em;
   line-height: 1;
+  color: var(--sand);
 }
 
 .brand-mark span {
-  background: linear-gradient(135deg, #ff9a4d, #ff5c6a);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  color: var(--accent-strong);
+  font-weight: 700;
 }
 
 .brand-sub {
-  margin: 4px 0 0;
+  margin: 5px 0 0;
   color: var(--sand-dim);
-  font-size: 0.82rem;
+  font-size: 0.8rem;
+  font-weight: 400;
+  letter-spacing: 0.01em;
 }
 
 .header-actions {
@@ -115,26 +114,25 @@ button:disabled {
 
 .icon-btn {
   position: relative;
-  width: 44px;
-  height: 44px;
-  border-radius: 16px;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
   display: grid;
   place-items: center;
   background: var(--card);
   border: 1px solid var(--line);
   color: var(--sand);
-  box-shadow: var(--shadow);
 }
 
 .icon-btn svg {
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
 }
 
 .icon-btn-primary {
-  background: linear-gradient(135deg, #ff9a4d, #ff5c6a);
-  color: #fff;
-  border: none;
+  background: #2a3440;
+  color: var(--sand);
+  border: 1px solid rgba(197, 204, 212, 0.18);
 }
 
 .badge {
@@ -145,10 +143,10 @@ button:disabled {
   height: 18px;
   padding: 0 5px;
   border-radius: 999px;
-  background: var(--coral);
+  background: #6e7a88;
   color: #fff;
   font-size: 0.68rem;
-  font-weight: 700;
+  font-weight: 600;
   display: grid;
   place-items: center;
 }
@@ -159,38 +157,37 @@ button:disabled {
 
 .search-bar input {
   width: 100%;
-  min-height: 46px;
-  border-radius: 16px;
+  min-height: 44px;
+  border-radius: 12px;
   border: 1px solid var(--line);
   background: var(--card);
   padding: 0 14px;
-  box-shadow: var(--shadow);
 }
 
 .hero-saldo {
-  border-radius: 26px;
-  padding: 22px 18px;
+  border-radius: 20px;
+  padding: 20px 18px;
   margin-bottom: 14px;
-  background: linear-gradient(160deg, #1c2433 0%, #151b26 100%);
+  background: var(--card);
   border: 1px solid var(--line);
-  box-shadow: var(--shadow);
   animation: rise 0.45s ease both;
 }
 
 .hero-label {
   margin: 0;
-  font-size: 0.75rem;
-  letter-spacing: 0.08em;
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--sand-dim);
+  font-weight: 500;
 }
 
 .hero-value {
   margin: 10px 0 8px;
   font-family: var(--font-display);
-  font-size: clamp(1.85rem, 8vw, 2.45rem);
-  font-weight: 800;
-  letter-spacing: -0.03em;
+  font-size: clamp(1.75rem, 7.5vw, 2.25rem);
+  font-weight: 600;
+  letter-spacing: -0.02em;
   line-height: 1;
 }
 
@@ -205,7 +202,7 @@ button:disabled {
 .hero-meta {
   margin: 0;
   color: var(--sand-dim);
-  font-size: 0.86rem;
+  font-size: 0.84rem;
 }
 
 .kpi-scroll {
@@ -227,36 +224,36 @@ button:disabled {
 
 .kpi-chip {
   scroll-snap-align: start;
-  border-radius: 20px;
-  padding: 16px;
+  border-radius: 16px;
+  padding: 14px;
   background: var(--card);
   border: 1px solid var(--line);
-  box-shadow: var(--shadow);
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .kpi-chip span {
-  font-size: 0.7rem;
-  letter-spacing: 0.05em;
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--sand-dim);
+  font-weight: 500;
 }
 
 .kpi-chip strong {
-  font-family: var(--font-display);
-  font-size: 1.05rem;
-  font-weight: 700;
+  font-family: var(--font-body);
+  font-size: 1.02rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
 }
 
 .panel {
-  background: linear-gradient(180deg, #1a2230 0%, #151c28 100%);
+  background: var(--card);
   border: 1px solid var(--line);
   border-radius: var(--radius);
   padding: 16px;
   margin-bottom: 14px;
   min-width: 0;
-  box-shadow: var(--shadow);
 }
 
 .panel-head {
@@ -272,26 +269,28 @@ button:disabled {
 .alert-list h2,
 .rank-list h2 {
   margin: 0;
-  font-family: var(--font-display);
-  font-size: 1.02rem;
-  font-weight: 700;
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
 }
 
 .link-more {
-  color: var(--amber);
-  font-size: 0.84rem;
-  font-weight: 600;
+  color: var(--accent);
+  font-size: 0.8rem;
+  font-weight: 500;
   padding: 0;
   white-space: nowrap;
 }
 
 .chip-soft {
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   color: var(--sand-dim);
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.03);
   border: 1px solid var(--line);
   border-radius: 999px;
-  padding: 5px 10px;
+  padding: 4px 10px;
+  font-weight: 500;
 }
 
 .chart-box {
@@ -304,12 +303,11 @@ button:disabled {
 }
 
 .chart-tooltip {
-  background: #151b26;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 12px;
+  background: #171d24;
+  border: 1px solid rgba(197, 204, 212, 0.12);
+  border-radius: 10px;
   padding: 10px 12px;
   font-size: 13px;
-  box-shadow: var(--shadow);
 }
 
 .chart-tooltip-title {
@@ -334,21 +332,20 @@ button:disabled {
   align-items: flex-start;
   gap: 4px;
   padding: 14px;
-  border-radius: 18px;
+  border-radius: 14px;
   background: var(--card);
   border: 1px solid var(--line);
   margin-bottom: 8px;
-  box-shadow: var(--shadow);
 }
 
 .alert-row.danger {
-  border-color: rgba(255, 92, 106, 0.35);
-  background: rgba(255, 92, 106, 0.1);
+  border-color: rgba(184, 122, 122, 0.4);
+  background: rgba(184, 122, 122, 0.08);
 }
 
 .alert-row span {
   color: var(--sand-dim);
-  font-size: 0.88rem;
+  font-size: 0.86rem;
 }
 
 .list-meta {
@@ -359,7 +356,7 @@ button:disabled {
 
 .list-meta span {
   color: var(--sand-dim);
-  font-size: 0.9rem;
+  font-size: 0.88rem;
 }
 
 .vehicle-cards {
@@ -368,11 +365,10 @@ button:disabled {
 }
 
 .vehicle-card {
-  border-radius: 20px;
-  padding: 16px;
+  border-radius: 16px;
+  padding: 15px;
   background: var(--card);
   border: 1px solid var(--line);
-  box-shadow: var(--shadow);
 }
 
 .vehicle-card-top {
@@ -384,22 +380,23 @@ button:disabled {
 
 .placa {
   margin: 0;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  font-size: 1rem;
+  font-family: var(--font-body);
 }
 
 .vehicle-sub {
   margin: 4px 0 0;
   color: var(--sand-dim);
-  font-size: 0.82rem;
+  font-size: 0.8rem;
 }
 
 .vehicle-saldo {
   margin: 0;
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 1rem;
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 0.98rem;
   text-align: right;
 }
 
@@ -423,16 +420,17 @@ button:disabled {
 
 .vehicle-grid span {
   display: block;
-  font-size: 0.68rem;
-  letter-spacing: 0.05em;
+  font-size: 0.66rem;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--sand-dim);
   margin-bottom: 2px;
+  font-weight: 500;
 }
 
 .vehicle-grid strong {
-  font-size: 0.9rem;
-  font-weight: 600;
+  font-size: 0.88rem;
+  font-weight: 500;
   word-break: break-word;
 }
 
@@ -441,31 +439,30 @@ button:disabled {
   color: var(--sand-dim);
   padding: 36px 12px;
   border: 1px dashed var(--line);
-  border-radius: 16px;
+  border-radius: 14px;
 }
 
 .rank-row {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 14px;
-  border-radius: 18px;
+  padding: 13px;
+  border-radius: 14px;
   background: var(--card);
   border: 1px solid var(--line);
-  margin-bottom: 10px;
-  box-shadow: var(--shadow);
+  margin-bottom: 8px;
 }
 
 .rank-pos {
-  width: 30px;
-  height: 30px;
-  border-radius: 10px;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
   display: grid;
   place-items: center;
-  background: var(--amber-soft);
-  color: var(--amber);
-  font-weight: 700;
-  font-size: 0.85rem;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-weight: 600;
+  font-size: 0.8rem;
   flex-shrink: 0;
 }
 
@@ -478,11 +475,11 @@ button:disabled {
 
 .rank-info span {
   color: var(--sand-dim);
-  font-size: 0.78rem;
+  font-size: 0.76rem;
 }
 
 .progress-track {
-  height: 6px;
+  height: 4px;
   border-radius: 99px;
   background: rgba(255, 255, 255, 0.06);
   overflow: hidden;
@@ -491,11 +488,12 @@ button:disabled {
 .progress-fill {
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, #ff8a3d, #ff5c6a);
+  background: var(--accent);
 }
 
 .rank-value {
-  font-size: 0.92rem;
+  font-size: 0.9rem;
+  font-weight: 600;
 }
 
 .bottom-nav {
@@ -508,11 +506,11 @@ button:disabled {
   grid-template-columns: repeat(3, 1fr);
   gap: 4px;
   padding: 8px;
-  background: rgba(18, 24, 34, 0.94);
-  backdrop-filter: blur(18px);
+  background: rgba(22, 28, 35, 0.96);
+  backdrop-filter: blur(16px);
   border: 1px solid var(--line);
-  border-radius: 22px;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.42);
+  border-radius: 18px;
+  box-shadow: var(--shadow);
 }
 
 .bottom-nav button {
@@ -520,24 +518,25 @@ button:disabled {
   justify-items: center;
   gap: 4px;
   padding: 8px 6px;
-  border-radius: 16px;
+  border-radius: 12px;
   color: var(--sand-dim);
-  min-height: 52px;
+  min-height: 50px;
 }
 
 .bottom-nav svg {
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
 }
 
 .bottom-nav span {
-  font-size: 0.72rem;
-  font-weight: 600;
+  font-size: 0.7rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
 }
 
 .bottom-nav button.is-active {
-  color: #fff;
-  background: linear-gradient(135deg, rgba(255, 138, 61, 0.3), rgba(255, 92, 106, 0.22));
+  color: var(--sand);
+  background: rgba(138, 150, 163, 0.16);
 }
 
 .sheet-root {
@@ -560,8 +559,8 @@ button:disabled {
   right: 0;
   bottom: 0;
   max-height: min(86dvh, 640px);
-  background: #121925;
-  border-radius: 24px 24px 0 0;
+  background: #171d24;
+  border-radius: 20px 20px 0 0;
   border: 1px solid var(--line);
   border-bottom: 0;
   display: flex;
@@ -571,10 +570,10 @@ button:disabled {
 }
 
 .sheet-handle {
-  width: 42px;
+  width: 40px;
   height: 4px;
   border-radius: 99px;
-  background: rgba(255, 255, 255, 0.22);
+  background: rgba(197, 204, 212, 0.25);
   margin: 10px auto 0;
 }
 
@@ -587,8 +586,9 @@ button:disabled {
 
 .sheet-head h2 {
   margin: 0;
-  font-family: var(--font-display);
-  font-size: 1.15rem;
+  font-family: var(--font-body);
+  font-size: 1.05rem;
+  font-weight: 600;
 }
 
 .sheet-body {
@@ -606,10 +606,11 @@ button:disabled {
 .filter label {
   display: grid;
   gap: 6px;
-  font-size: 0.7rem;
-  letter-spacing: 0.06em;
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--sand-dim);
+  font-weight: 500;
 }
 
 .filter select,
@@ -618,25 +619,25 @@ button:disabled {
   background: var(--ink-2);
   border: 1px solid var(--line);
   color: var(--sand);
-  border-radius: 14px;
+  border-radius: 12px;
   padding: 12px;
-  min-height: 46px;
+  min-height: 44px;
 }
 
 .btn {
   border: 1px solid var(--line);
   background: var(--card);
   color: var(--sand);
-  border-radius: 14px;
+  border-radius: 12px;
   padding: 12px 16px;
-  min-height: 46px;
-  font-weight: 600;
+  min-height: 44px;
+  font-weight: 500;
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, #ff9a4d, #ff5c6a);
-  color: #fff;
-  border: none;
+  background: #2a3440;
+  color: var(--sand);
+  border: 1px solid rgba(197, 204, 212, 0.2);
 }
 
 .btn-ghost {
@@ -667,10 +668,9 @@ button:disabled {
 .table-wrap {
   overflow: auto;
   border: 1px solid var(--line);
-  border-radius: 18px;
+  border-radius: 14px;
   background: var(--card);
   max-height: min(560px, 70vh);
-  box-shadow: var(--shadow);
 }
 
 table {
@@ -691,12 +691,13 @@ td {
 th {
   position: sticky;
   top: 0;
-  background: #1a2230;
-  font-size: 0.7rem;
-  letter-spacing: 0.05em;
+  background: #1c242d;
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--sand-dim);
   z-index: 1;
+  font-weight: 500;
 }
 
 .num {
@@ -715,23 +716,24 @@ th {
   width: min(420px, 100%);
   background: var(--card);
   border: 1px solid var(--line);
-  border-radius: 22px;
+  border-radius: 16px;
   padding: 24px 20px;
-  box-shadow: var(--shadow);
 }
 
 .state-eyebrow {
   margin: 0 0 8px;
-  font-size: 0.72rem;
-  letter-spacing: 0.08em;
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--coral);
+  font-weight: 500;
 }
 
 .state-card h1 {
   margin: 0 0 10px;
   font-family: var(--font-display);
-  font-size: 1.3rem;
+  font-size: 1.25rem;
+  font-weight: 600;
 }
 
 .state-body {
@@ -742,9 +744,9 @@ th {
 .skeleton {
   background: linear-gradient(
     90deg,
-    rgba(28, 39, 54, 0.6),
-    rgba(40, 52, 70, 0.9),
-    rgba(28, 39, 54, 0.6)
+    rgba(28, 36, 44, 0.6),
+    rgba(40, 50, 60, 0.9),
+    rgba(28, 36, 44, 0.6)
   );
   background-size: 200% 100%;
   animation: shimmer 1.2s ease infinite;
@@ -807,7 +809,7 @@ th {
   }
 
   .brand-mark {
-    font-size: 2.1rem;
+    font-size: 1.85rem;
   }
 
   .search-bar {

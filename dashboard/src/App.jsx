@@ -13,8 +13,8 @@ import { useDashboard } from "./hooks/useDashboard";
 import { formatBRL, formatDate } from "./lib/format";
 import "./index.css";
 
-const CHART_MUTED = "#3a4454";
-const CHART_ACCENT = ["#ff8a3d", "#ff5c6a"];
+const CHART_MUTED = "#2e3640";
+const CHART_ACCENT = ["#8a96a3", "#6b7885"];
 
 function highlightIndex(rows, valueKey = "premio") {
   if (!rows.length) return -1;
@@ -131,13 +131,15 @@ export default function App() {
 
   const filteredTotals = useMemo(() => {
     const withPremio = filtered.filter((v) => v.premio != null);
+    const withSaldo = filtered.filter((v) => v.saldo != null);
     return {
       veiculos: filtered.length,
       premio: withPremio.reduce((a, v) => a + (v.premio || 0), 0),
       imposto: withPremio.reduce((a, v) => a + (v.imposto || 0), 0),
-      saldo: withPremio.reduce((a, v) => a + (v.saldo || 0), 0),
+      saldo: withSaldo.reduce((a, v) => a + (v.saldo || 0), 0),
       semPremio: filtered.filter((v) => v.premio == null).length,
-      despesas: withPremio.reduce(
+      // Apoio / Loc / Guincho são sempre despesas.
+      despesas: filtered.reduce(
         (a, v) => a + (v.apoio || 0) + (v.loc2 || 0) + (v.guincho || 0),
         0,
       ),
@@ -330,7 +332,7 @@ export default function App() {
             </article>
             <article className="kpi-chip">
               <span>Despesas</span>
-              <strong>{formatBRL(filteredTotals.despesas)}</strong>
+              <strong className="despesa">{formatBRL(filteredTotals.despesas)}</strong>
             </article>
             <article className="kpi-chip">
               <span>Imposto</span>
