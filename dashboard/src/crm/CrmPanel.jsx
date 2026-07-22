@@ -33,14 +33,75 @@ function payTag(ev) {
   const forma = FORMA_LABEL[ev.tipo] || (ev.tipo || "PIX").toUpperCase();
   return `${cat} · ${forma}`;
 }
-function Card({ item, labels, onOpen, dragging, onDragStart, onDragEnd }) {
+function statusFromPoint(clientX, clientY) {
+  const el = document.elementFromPoint(clientX, clientY);
+  return el?.closest("[data-crm-status]")?.getAttribute("data-crm-status") || null;
+}
+
+function Card({ item, labels, onOpen, dragging, onDragMove, onDragEnd }) {
+  const pointerRef = useRef(null);
+
+  const finishPointer = (e, moved) => {
+    const start = pointerRef.current;
+    pointerRef.current = null;
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {
+      /* already released */
+    }
+    if (moved) {
+      e.currentTarget.style.pointerEvents = "none";
+      const status = statusFromPoint(e.clientX, e.clientY);
+      e.currentTarget.style.pointerEvents = "";
+      onDragEnd?.(item, status);
+      return;
+    }
+    onDragEnd?.(item, null);
+    onOpen(item.placa);
+  };
+
   return (
-    <article className={`crm-card ${dragging ? "is-dragging" : ""}`}>
-      <button type="button" className="crm-card-main" onClick={() => onOpen(item.placa)}>
+    <article
+      className={`crm-card ${dragging ? "is-dragging" : ""}`}
+      onPointerDown={(e) => {
+        if (e.button !== 0) return;
+        pointerRef.current = { x: e.clientX, y: e.clientY, moved: false };
+        e.currentTarget.setPointerCapture(e.pointerId);
+      }}
+      onPointerMove={(e) => {
+        const start = pointerRef.current;
+        if (!start) return;
+        const dist = Math.hypot(e.clientX - start.x, e.clientY - start.y);
+        if (!start.moved && dist < 12) return;
+        start.moved = true;
+        e.currentTarget.style.pointerEvents = "none";
+        const status = statusFromPoint(e.clientX, e.clientY);
+        e.currentTarget.style.pointerEvents = "";
+        onDragMove?.(item, status);
+      }}
+      onPointerUp={(e) => {
+        if (!pointerRef.current) return;
+        finishPointer(e, pointerRef.current.moved);
+      }}
+      onPointerCancel={(e) => {
+        if (!pointerRef.current) return;
+        pointerRef.current = null;
+        try {
+          e.currentTarget.releasePointerCapture(e.pointerId);
+        } catch {
+          /* ignore */
+        }
+        onDragEnd?.(item, null);
+      }}
+    >
+      <div className="crm-card-main">
         <div className="crm-card-top">
           <strong className="placa">{item.placa}</strong>
-          {item.rastreado && <span className="tag-rastreado">Rastreado</span>}
+          <span className="crm-card-drag-hint" aria-hidden="true">
+            ⋮⋮
+          </span>
         </div>
+        {item.rastreado && <span className="tag-rastreado">Rastreado</span>}
         <p className="crm-card-sub">{item.assessoria || "Sem assessoria"}</p>
         <p className="crm-card-meta">
           {item.localizador ? `${item.localizador} · ` : ""}
@@ -52,19 +113,7 @@ function Card({ item, labels, onOpen, dragging, onDragStart, onDragEnd }) {
           <span>{labels[item.status] || item.status}</span>
           <span>Contato {formatShortDate(item.proximoContato)}</span>
         </div>
-      </button>
-      <button
-        type="button"
-        className="crm-card-grip"
-        draggable
-        aria-label={`Arrastar ${item.placa}`}
-        title="Arrastar para outra coluna"
-        onClick={(e) => e.stopPropagation()}
-        onDragStart={(e) => onDragStart?.(e, item)}
-        onDragEnd={onDragEnd}
-      >
-        ⋮⋮
-      </button>
+      </div>
     </article>
   );
 }
@@ -252,7 +301,7 @@ export default function CrmPanel({
   });
 
   const openDetail = (placa) => {
-    if (!placa || dragMovedRef.current) return;
+    if (!placa) return;
     setSelectedPlaca(placa);
     setDetailTab("resumo");
   };
@@ -277,39 +326,20 @@ export default function CrmPanel({
     await runAction({ action: "update", placa, status });
   };
 
-  const onCardDragStart = (e, item) => {
-    dragMovedRef.current = false;
-    setDragPlaca(item.placa);
-    e.dataTransfer.setData("text/placa", item.placa);
-    e.dataTransfer.setData("text/plain", item.placa);
-    e.dataTransfer.effectAllowed = "move";
-  };
-
-  const onCardDragEnd = () => {
-    setDragPlaca(null);
-    setDragOverStatus(null);
-    // Evita click fantasma só logo após um drop real
-    if (dragMovedRef.current) {
-      window.setTimeout(() => {
-        dragMovedRef.current = false;
-      }, 120);
-    }
-  };
-
-  const onColumnDragOver = (e, status) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = "move";
+  const onCardDragMove = (item, status) => {
     dragMovedRef.current = true;
-    if (dragOverStatus !== status) setDragOverStatus(status);
+    setDragPlaca(item.placa);
+    setDragOverStatus(status);
   };
 
-  const onColumnDrop = async (e, status) => {
-    e.preventDefault();
-    const placa = e.dataTransfer.getData("text/placa") || dragPlaca;
-    setDragOverStatus(null);
+  const onCardDragEnd = async (item, status) => {
     setDragPlaca(null);
-    if (!placa || saving) return;
-    await moveToStatus(placa, status);
+    setDragOverStatus(null);
+    const moved = dragMovedRef.current;
+    dragMovedRef.current = false;
+    if (moved && status && status !== item.status) {
+      await moveToStatus(item.placa, status);
+    }
   };
 
   const openCalForm = (isoDate) => {
@@ -392,7 +422,7 @@ export default function CrmPanel({
 
       {crmTab === "filas" && (
         <>
-          <p className="crm-dnd-hint">Toque no card para abrir · arraste pelo ⋮⋮ para mudar a coluna.</p>
+          <p className="crm-dnd-hint">Toque para abrir · arraste o card para outra coluna.</p>
           <div className="crm-kanban">
             {KANBAN_STATUSES.map((status) => {
               const items = byStatus[status] || [];
@@ -400,12 +430,8 @@ export default function CrmPanel({
               return (
                 <section
                   key={status}
+                  data-crm-status={status}
                   className={`crm-column ${dragOverStatus === status ? "is-drop-target" : ""}`}
-                  onDragOver={(e) => onColumnDragOver(e, status)}
-                  onDragLeave={() => {
-                    if (dragOverStatus === status) setDragOverStatus(null);
-                  }}
-                  onDrop={(e) => onColumnDrop(e, status)}
                 >
                   <header>
                     <h3>{labels[status] || status}</h3>
@@ -419,7 +445,7 @@ export default function CrmPanel({
                         labels={labels}
                         onOpen={openDetail}
                         dragging={dragPlaca === item.placa}
-                        onDragStart={onCardDragStart}
+                        onDragMove={onCardDragMove}
                         onDragEnd={onCardDragEnd}
                       />
                     ))}
@@ -694,39 +720,47 @@ export default function CrmPanel({
             aria-label={`Detalhe ${selected.placa}`}
           >
             <button type="button" className="sheet-backdrop" aria-label="Fechar" onClick={closeDetail} />
-            <div className="sheet sheet-tall">
+            <div className="sheet sheet-tall crm-detail-card">
               <div className="sheet-handle" />
               <header className="crm-sheet-head">
                 <div className="crm-sheet-title">
-                  <p className="crm-sheet-placa">{selected.placa}</p>
+                  <div className="crm-sheet-placa-row">
+                    <p className="crm-sheet-placa">{selected.placa}</p>
+                    <span className="crm-status-chip">{labels[selected.status] || selected.status}</span>
+                  </div>
                   <p className="crm-sheet-sub">
                     {[selected.veiculo, selected.cor, selected.uf].filter(Boolean).join(" · ") ||
                       "Sem descrição"}
                   </p>
                   <p className="crm-sheet-meta-line">
-                    {selected.localizador || "—"}
-                    {selected.assessoria ? ` · ${selected.assessoria}` : ""}
+                    <span>{selected.localizador || "—"}</span>
+                    {selected.assessoria ? <span> · {selected.assessoria}</span> : null}
+                    {selected.telefone ? (
+                      <>
+                        {" · "}
+                        <a href={`tel:${selected.telefone.replace(/\D/g, "")}`}>{selected.telefone}</a>
+                      </>
+                    ) : null}
                   </p>
+                  <div className="crm-sheet-chips">
+                    {selected.rastreado && <span className="tag-rastreado">Rastreado</span>}
+                    {selected.temMandado && <span className="tag-pagamento-pendente">MDD</span>}
+                    {(data?.pendingByPlaca?.[selected.placa] || []).length > 0 && (
+                      <span className="tag-pagamento-pendente">
+                        {(data.pendingByPlaca[selected.placa] || []).length} pend.
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <button type="button" className="crm-sheet-close" onClick={closeDetail} aria-label="Fechar">
                   ✕
                 </button>
               </header>
 
-              <div className="crm-sheet-chips">
-                <span className="crm-status-chip">{labels[selected.status] || selected.status}</span>
-                {selected.rastreado && <span className="tag-rastreado">Rastreado</span>}
-                {(data?.pendingByPlaca?.[selected.placa] || []).length > 0 && (
-                  <span className="tag-pagamento-pendente">
-                    {(data.pendingByPlaca[selected.placa] || []).length} pend.
-                  </span>
-                )}
-              </div>
-
               <div className="crm-detail-tabs" role="tablist">
                 {[
                   ["resumo", "Dados"],
-                  ["pagamento", "Recebimentos"],
+                  ["pagamento", "Receber"],
                   ["historico", "Histórico"],
                 ].map(([id, label]) => (
                   <button
@@ -762,21 +796,7 @@ export default function CrmPanel({
                         <dt>Diárias</dt>
                         <dd>{selected.diarias ?? "—"}</dd>
                       </div>
-                      <div>
-                        <dt>Entrada</dt>
-                        <dd>{formatShortDate(selected.dataEntradaPatio)}</dd>
-                      </div>
-                      <div>
-                        <dt>Origem</dt>
-                        <dd>{selected.origem || "—"}</dd>
-                      </div>
                     </dl>
-
-                    {selected.telefone && (
-                      <a className="crm-phone-link" href={`tel:${selected.telefone.replace(/\D/g, "")}`}>
-                        {selected.telefone}
-                      </a>
-                    )}
 
                     <div className="crm-toggle-row">
                       <button
@@ -795,20 +815,6 @@ export default function CrmPanel({
                       </button>
                       <button
                         type="button"
-                        className={`crm-toggle ${selected.usaGuincho ? "is-on" : ""}`}
-                        disabled={saving}
-                        onClick={() =>
-                          runAction({
-                            action: "update",
-                            placa: selected.placa,
-                            usaGuincho: !selected.usaGuincho,
-                          })
-                        }
-                      >
-                        Guincho
-                      </button>
-                      <button
-                        type="button"
                         className={`crm-toggle ${selected.temMandado ? "is-on" : ""}`}
                         disabled={saving}
                         onClick={() =>
@@ -821,22 +827,38 @@ export default function CrmPanel({
                       >
                         Mandado
                       </button>
+                      <button
+                        type="button"
+                        className={`crm-toggle ${selected.usaGuincho ? "is-on" : ""}`}
+                        disabled={saving}
+                        onClick={() =>
+                          runAction({
+                            action: "update",
+                            placa: selected.placa,
+                            usaGuincho: !selected.usaGuincho,
+                          })
+                        }
+                      >
+                        Guincho
+                      </button>
                     </div>
 
-                    <button
-                      type="button"
-                      className="btn btn-ghost btn-block"
-                      disabled={saving || selected.noControle}
-                      onClick={() =>
-                        runAction({
-                          action: "bridge",
-                          placa: selected.placa,
-                          overwrite: true,
-                        })
-                      }
-                    >
-                      {selected.noControle ? "Já está no Controle" : "Enviar ao Controle"}
-                    </button>
+                    {!selected.noControle && (
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-block crm-bridge-link"
+                        disabled={saving}
+                        onClick={() =>
+                          runAction({
+                            action: "bridge",
+                            placa: selected.placa,
+                            overwrite: true,
+                          })
+                        }
+                      >
+                        Enviar ao Controle
+                      </button>
+                    )}
                   </>
                 )}
 
