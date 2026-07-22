@@ -35,8 +35,19 @@ function payTag(ev) {
 }
 
 function statusFromPoint(clientX, clientY) {
-  const el = document.elementFromPoint(clientX, clientY);
-  return el?.closest("[data-crm-status]")?.getAttribute("data-crm-status") || null;
+  const cols = document.querySelectorAll("[data-crm-status]");
+  for (const col of cols) {
+    const r = col.getBoundingClientRect();
+    if (
+      clientX >= r.left &&
+      clientX <= r.right &&
+      clientY >= r.top &&
+      clientY <= r.bottom
+    ) {
+      return col.getAttribute("data-crm-status");
+    }
+  }
+  return null;
 }
 
 function clearDropHighlights() {
@@ -65,32 +76,29 @@ function Card({ item, labels, onOpen, onMoveToStatus }) {
       s.ghost?.remove();
       s.sourceEl?.classList.remove("is-drag-source");
       clearDropHighlights();
+      document.body.classList.remove("crm-dragging");
       sessionRef.current = null;
     };
   }, []);
 
-  const endSession = (clientX, clientY, { openIfNotMoved }) => {
+  const endSession = (clientX, clientY) => {
     const s = sessionRef.current;
     if (!s) return;
     sessionRef.current = null;
     window.removeEventListener("pointermove", s.onMove);
     window.removeEventListener("pointerup", s.onUp);
     window.removeEventListener("pointercancel", s.onUp);
+
+    const status = s.overStatus || statusFromPoint(clientX, clientY);
+
     s.ghost?.remove();
     s.sourceEl?.classList.remove("is-drag-source");
     clearDropHighlights();
     document.body.classList.remove("crm-dragging");
 
-    if (!s.moved) {
-      if (openIfNotMoved) onOpen(item.placa);
-      return;
+    if (status && status !== item.status) {
+      onMoveToStatus(item.placa, status);
     }
-
-    s.sourceEl.style.pointerEvents = "none";
-    s.ghost && (s.ghost.style.pointerEvents = "none");
-    const status = statusFromPoint(clientX, clientY);
-    s.sourceEl.style.pointerEvents = "";
-    if (status && status !== item.status) onMoveToStatus(item.placa, status);
   };
 
   const beginDrag = (e) => {
@@ -107,11 +115,11 @@ function Card({ item, labels, onOpen, onMoveToStatus }) {
     document.body.classList.add("crm-dragging");
 
     const session = {
-      moved: true,
       ghost,
       sourceEl,
       offsetX: e.clientX - rect.left,
       offsetY: e.clientY - rect.top,
+      overStatus: item.status,
       onMove: null,
       onUp: null,
     };
@@ -121,22 +129,19 @@ function Card({ item, labels, onOpen, onMoveToStatus }) {
       const x = ev.clientX - session.offsetX;
       const y = ev.clientY - session.offsetY;
       session.ghost.style.transform = `translate3d(${x}px, ${y}px, 0)`;
-      session.sourceEl.style.pointerEvents = "none";
-      session.ghost.style.pointerEvents = "none";
       const status = statusFromPoint(ev.clientX, ev.clientY);
-      session.sourceEl.style.pointerEvents = "";
-      highlightDropStatus(status);
+      if (status) session.overStatus = status;
+      highlightDropStatus(session.overStatus);
 
-      // Auto-scroll horizontal do kanban
       const board = session.sourceEl.closest(".crm-kanban");
       if (board) {
         const b = board.getBoundingClientRect();
-        if (ev.clientX > b.right - 48) board.scrollLeft += 18;
-        if (ev.clientX < b.left + 48) board.scrollLeft -= 18;
+        if (ev.clientX > b.right - 56) board.scrollLeft += 24;
+        if (ev.clientX < b.left + 56) board.scrollLeft -= 24;
       }
     };
 
-    session.onUp = (ev) => endSession(ev.clientX, ev.clientY, { openIfNotMoved: false });
+    session.onUp = (ev) => endSession(ev.clientX, ev.clientY);
 
     sessionRef.current = session;
     window.addEventListener("pointermove", session.onMove, { passive: false });
@@ -276,13 +281,20 @@ export default function CrmPanel({
   const [payFilter, setPayFilter] = useState("all");
   const [calFormOpen, setCalFormOpen] = useState(false);
   const [detailTab, setDetailTab] = useState("resumo");
+  const [statusOverrides, setStatusOverrides] = useState({});
 
   const labels = data?.meta?.statusLabels || STATUS_LABELS;
   const pipeline = useMemo(() => {
     const all = data?.pipeline || [];
     const locNeedle = String(locFilter || "all").trim().toUpperCase();
     const assNeedle = String(assessoriaFilter || "all").trim().toUpperCase();
-    return all.filter((item) => {
+    return all
+      .map((item) =>
+        statusOverrides[item.placa]
+          ? { ...item, status: statusOverrides[item.placa] }
+          : item,
+      )
+      .filter((item) => {
       if (locNeedle !== "ALL") {
         const loc = String(item.localizador || "").trim().toUpperCase();
         if (loc !== locNeedle) return false;
@@ -293,7 +305,7 @@ export default function CrmPanel({
       }
       return matchesCrmSearch(item, searchQuery, labels);
     });
-  }, [data, searchQuery, labels, locFilter, assessoriaFilter]);
+  }, [data, searchQuery, labels, locFilter, assessoriaFilter, statusOverrides]);
 
   const pipelinePlacas = useMemo(() => new Set(pipeline.map((p) => p.placa)), [pipeline]);
 
@@ -404,7 +416,23 @@ export default function CrmPanel({
   const moveToStatus = async (placa, status) => {
     const current = (data?.pipeline || []).find((p) => p.placa === placa);
     if (!current || current.status === status) return;
-    await runAction({ action: "update", placa, status });
+    // Otimista: card já muda de coluna; API confirma em seguida
+    setStatusOverrides((prev) => ({ ...prev, [placa]: status }));
+    try {
+      await runAction({ action: "update", placa, status });
+    } catch {
+      setStatusOverrides((prev) => {
+        const next = { ...prev };
+        delete next[placa];
+        return next;
+      });
+      return;
+    }
+    setStatusOverrides((prev) => {
+      const next = { ...prev };
+      delete next[placa];
+      return next;
+    });
   };
 
   const openCalForm = (isoDate) => {
