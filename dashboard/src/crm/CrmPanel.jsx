@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { formatBRL } from "../lib/format";
+import CrmCard from "./CrmCard";
 import NewOcorrenciaSheet from "./NewOcorrenciaSheet";
 import {
   NEXT_STATUS,
@@ -32,207 +33,6 @@ function payTag(ev) {
   const cat = CAT_LABEL[ev.categoria] || ev.categoria || "Apreensão";
   const forma = FORMA_LABEL[ev.tipo] || (ev.tipo || "PIX").toUpperCase();
   return `${cat} · ${forma}`;
-}
-
-function statusFromPoint(clientX, clientY) {
-  const cols = document.querySelectorAll("[data-crm-status]");
-  for (const col of cols) {
-    const r = col.getBoundingClientRect();
-    if (
-      clientX >= r.left &&
-      clientX <= r.right &&
-      clientY >= r.top &&
-      clientY <= r.bottom
-    ) {
-      return col.getAttribute("data-crm-status");
-    }
-  }
-  return null;
-}
-
-function clearDropHighlights() {
-  document.querySelectorAll(".crm-column.is-drop-target").forEach((el) => {
-    el.classList.remove("is-drop-target");
-  });
-}
-
-function highlightDropStatus(status) {
-  document.querySelectorAll("[data-crm-status]").forEach((el) => {
-    el.classList.toggle("is-drop-target", el.getAttribute("data-crm-status") === status);
-  });
-}
-
-function Card({ item, labels, onOpen, onMoveToStatus }) {
-  const cardRef = useRef(null);
-  const sessionRef = useRef(null);
-  const holdRef = useRef(null);
-
-  useEffect(() => {
-    return () => {
-      if (holdRef.current?.timer) window.clearTimeout(holdRef.current.timer);
-      holdRef.current = null;
-      const s = sessionRef.current;
-      if (s) {
-        window.removeEventListener("pointermove", s.onMove);
-        window.removeEventListener("pointerup", s.onUp);
-        window.removeEventListener("pointercancel", s.onUp);
-        s.ghost?.remove();
-        s.sourceEl?.classList.remove("is-drag-source", "is-hold-ready");
-        sessionRef.current = null;
-      }
-      clearDropHighlights();
-      document.body.classList.remove("crm-dragging");
-      document.body.style.touchAction = "";
-    };
-  }, []);
-
-  const endSession = (clientX, clientY) => {
-    const s = sessionRef.current;
-    if (!s) return;
-    sessionRef.current = null;
-    window.removeEventListener("pointermove", s.onMove);
-    window.removeEventListener("pointerup", s.onUp);
-    window.removeEventListener("pointercancel", s.onUp);
-
-    const status = s.overStatus || statusFromPoint(clientX, clientY);
-
-    s.ghost?.remove();
-    s.sourceEl?.classList.remove("is-drag-source");
-    clearDropHighlights();
-    document.body.classList.remove("crm-dragging");
-
-    if (status && status !== item.status) {
-      onMoveToStatus(item.placa, status);
-    }
-  };
-
-  const beginDrag = (clientX, clientY) => {
-    const sourceEl = cardRef.current;
-    if (!sourceEl) return;
-    const rect = sourceEl.getBoundingClientRect();
-    const ghost = sourceEl.cloneNode(true);
-    ghost.classList.add("crm-card-ghost");
-    ghost.setAttribute("aria-hidden", "true");
-    ghost.style.width = `${rect.width}px`;
-    ghost.style.transform = `translate3d(${rect.left}px, ${rect.top}px, 0)`;
-    document.body.appendChild(ghost);
-    sourceEl.classList.remove("is-hold-ready");
-    sourceEl.classList.add("is-drag-source");
-    document.body.classList.add("crm-dragging");
-
-    const session = {
-      ghost,
-      sourceEl,
-      offsetX: clientX - rect.left,
-      offsetY: clientY - rect.top,
-      overStatus: item.status,
-      onMove: null,
-      onUp: null,
-    };
-
-    session.onMove = (ev) => {
-      ev.preventDefault();
-      const x = ev.clientX - session.offsetX;
-      const y = ev.clientY - session.offsetY;
-      session.ghost.style.transform = `translate3d(${x}px, ${y}px, 0)`;
-      const status = statusFromPoint(ev.clientX, ev.clientY);
-      if (status) session.overStatus = status;
-      highlightDropStatus(session.overStatus);
-
-      const board = session.sourceEl.closest(".crm-kanban");
-      if (board) {
-        const b = board.getBoundingClientRect();
-        if (ev.clientX > b.right - 56) board.scrollLeft += 24;
-        if (ev.clientX < b.left + 56) board.scrollLeft -= 24;
-      }
-    };
-
-    session.onUp = (ev) => endSession(ev.clientX, ev.clientY);
-
-    sessionRef.current = session;
-    window.addEventListener("pointermove", session.onMove, { passive: false });
-    window.addEventListener("pointerup", session.onUp);
-    window.addEventListener("pointercancel", session.onUp);
-    session.onMove({ clientX, clientY, preventDefault() {} });
-  };
-
-  const clearHold = () => {
-    const h = holdRef.current;
-    if (!h) return;
-    if (h.timer) window.clearTimeout(h.timer);
-    window.removeEventListener("pointermove", h.onMove);
-    window.removeEventListener("pointerup", h.onUp);
-    window.removeEventListener("pointercancel", h.onUp);
-    cardRef.current?.classList.remove("is-hold-ready");
-    holdRef.current = null;
-  };
-
-  return (
-    <article
-      ref={cardRef}
-      className="crm-card"
-      onPointerDown={(e) => {
-        if (e.button !== 0) return;
-        // Não captura o gesto: scroll horizontal continua livre até o long-press
-        const startX = e.clientX;
-        const startY = e.clientY;
-        let armed = false;
-
-        const onMove = (ev) => {
-          if (Math.hypot(ev.clientX - startX, ev.clientY - startY) > 10) {
-            // Dedo deslizou → cancela hold e deixa a tela rolar
-            clearHold();
-          }
-        };
-
-        const onUp = () => {
-          const wasArmed = armed;
-          clearHold();
-          // Toque curto (sem hold) abre o detalhe
-          if (!wasArmed && !sessionRef.current) onOpen(item.placa);
-        };
-
-        const timer = window.setTimeout(() => {
-          armed = true;
-          cardRef.current?.classList.add("is-hold-ready");
-          // vibração leve se disponível
-          try {
-            navigator.vibrate?.(12);
-          } catch {
-            /* ignore */
-          }
-          clearHold();
-          beginDrag(startX, startY);
-        }, 450);
-
-        holdRef.current = { timer, onMove, onUp };
-        window.addEventListener("pointermove", onMove, { passive: true });
-        window.addEventListener("pointerup", onUp);
-        window.addEventListener("pointercancel", onUp);
-      }}
-    >
-      <div className="crm-card-main">
-        <div className="crm-card-top">
-          <strong className="placa">{item.placa}</strong>
-          <span className="crm-card-drag-hint" aria-hidden="true">
-            ⋮⋮
-          </span>
-        </div>
-        {item.rastreado && <span className="tag-rastreado">Rastreado</span>}
-        <p className="crm-card-sub">{item.assessoria || "Sem assessoria"}</p>
-        <p className="crm-card-meta">
-          {item.localizador ? `${item.localizador} · ` : ""}
-          {item.veiculo
-            ? `${item.veiculo.slice(0, 24)}${item.veiculo.length > 24 ? "…" : ""}`
-            : "—"}
-        </p>
-        <div className="crm-card-foot">
-          <span>{labels[item.status] || item.status}</span>
-          <span>Contato {formatShortDate(item.proximoContato)}</span>
-        </div>
-      </div>
-    </article>
-  );
 }
 
 const KANBAN_STATUSES = STATUS_ORDER.filter(
@@ -545,7 +345,9 @@ export default function CrmPanel({
 
       {crmTab === "filas" && (
         <>
-          <p className="crm-dnd-hint">Toque para abrir · segure ~0,5s e arraste para mudar a coluna.</p>
+          <p className="crm-dnd-hint">
+            Toque no card para abrir · arraste pela alça ⋮⋮ para mudar a coluna.
+          </p>
           <div className="crm-kanban">
             {KANBAN_STATUSES.map((status) => {
               const items = byStatus[status] || [];
@@ -562,7 +364,7 @@ export default function CrmPanel({
                   </header>
                   <div className="crm-column-body">
                     {items.map((item) => (
-                      <Card
+                      <CrmCard
                         key={item.placa}
                         item={item}
                         labels={labels}
