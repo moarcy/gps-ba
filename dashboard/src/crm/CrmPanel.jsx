@@ -201,18 +201,49 @@ export default function CrmPanel({
 
   const calendarDays = useMemo(() => {
     const map = new Map();
-    for (const p of data?.pagamentos || []) {
-      if (!p.dataPrevista) continue;
-      if (payFilter === "pago" && !p.pago) continue;
-      if (payFilter === "aberto" && p.pago) continue;
-      // Com busca ativa, só mostra pagamentos das placas filtradas
-      if (searchQuery.trim() && !pipelinePlacas.has(p.placa)) continue;
-      const key = p.dataPrevista.slice(0, 10);
+    const push = (iso, ev) => {
+      if (!iso) return;
+      const key = String(iso).slice(0, 10);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(key)) return;
       if (!map.has(key)) map.set(key, []);
-      map.get(key).push(p);
+      map.get(key).push(ev);
+    };
+
+    const showPay = payFilter === "all" || payFilter === "aberto" || payFilter === "pago";
+    const showOps = payFilter === "all" || payFilter === "operacao";
+
+    if (showPay) {
+      for (const p of data?.pagamentos || []) {
+        if (payFilter === "pago" && !p.pago) continue;
+        if (payFilter === "aberto" && p.pago) continue;
+        if (searchQuery.trim() && !pipelinePlacas.has(p.placa)) continue;
+        push(p.dataPrevista, {
+          ...p,
+          kind: "pagamento",
+          calLabel: payTag(p),
+        });
+      }
     }
+
+    if (showOps) {
+      for (const item of pipeline) {
+        if (!item.proximoContato) continue;
+        if (["entregue", "cancelado"].includes(item.status)) continue;
+        const kind = item.temMandado ? "mandado" : "contato";
+        push(item.proximoContato, {
+          id: `${kind}-${item.placa}`,
+          kind,
+          placa: item.placa,
+          assessoria: item.assessoria,
+          localizador: item.localizador,
+          pago: false,
+          calLabel: item.temMandado ? "MDD" : "Contato",
+        });
+      }
+    }
+
     return map;
-  }, [data, payFilter, searchQuery, pipelinePlacas]);
+  }, [data, payFilter, searchQuery, pipelinePlacas, pipeline]);
 
   const monthCells = buildMonthMatrix(calCursor.year, calCursor.month);
   const monthLabel = new Date(calCursor.year, calCursor.month, 1).toLocaleDateString("pt-BR", {
@@ -461,7 +492,8 @@ export default function CrmPanel({
 
           <div className="crm-cal-actions">
             <p className="section-hint">
-              Toque num dia ou em “+ Recebimento” para agendar Apreensão / Guincho / Estadia / Plus.
+              Sincronizado com recebimentos, contatos e mandado (MDD). Toque num dia para agendar
+              recebimento.
             </p>
             <button
               type="button"
@@ -475,7 +507,8 @@ export default function CrmPanel({
           <div className="crm-pay-filters">
             {[
               ["all", "Todos"],
-              ["aberto", "Em aberto"],
+              ["operacao", "Operação"],
+              ["aberto", "A receber"],
               ["pago", "Pagos"],
             ].map(([id, label]) => (
               <button
@@ -599,15 +632,19 @@ export default function CrmPanel({
                   </button>
                   {events.map((ev) => {
                     const tracked = pipeline.find((p) => p.placa === ev.placa)?.rastreado;
+                    const title =
+                      ev.kind === "pagamento"
+                        ? `${ev.placa} · ${ev.calLabel}`
+                        : `${ev.placa} · ${ev.calLabel}${ev.assessoria ? ` · ${ev.assessoria}` : ""}`;
                     return (
                       <button
                         key={ev.id}
                         type="button"
-                        className={`crm-cal-tag ${ev.pago ? "is-paid" : ""} ${tracked ? "is-tracked" : ""}`}
+                        className={`crm-cal-tag kind-${ev.kind || "pagamento"} ${ev.pago ? "is-paid" : ""} ${tracked ? "is-tracked" : ""}`}
                         onClick={() => openDetail(ev.placa)}
-                        title={`${ev.placa} ${payTag(ev)}`}
+                        title={title}
                       >
-                        {payTag(ev)} {ev.assessoria || ev.placa}
+                        {ev.calLabel} {ev.placa}
                       </button>
                     );
                   })}

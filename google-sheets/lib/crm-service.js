@@ -288,7 +288,15 @@ export async function updateOcorrencia(placaInput, patch = {}) {
     if (patch.localizador !== undefined) next.localizador = normalizeLocalizador(patch.localizador);
     if (patch.uf !== undefined) next.uf = normalizeText(patch.uf).toUpperCase();
     if (patch.rastreado !== undefined) next.rastreado = Boolean(patch.rastreado);
-    if (patch.temMandado !== undefined) next.temMandado = Boolean(patch.temMandado);
+    if (patch.temMandado !== undefined) {
+      const was = Boolean(current.temMandado);
+      next.temMandado = Boolean(patch.temMandado);
+      // MDD ativo → garante data no calendário (próximo contato / prazo de trabalho)
+      if (next.temMandado && !was) {
+        const due = next.proximoContato || current.proximoContato;
+        if (!due || due < todayIso()) next.proximoContato = plusDaysIso(7);
+      }
+    }
     if (patch.usaGuincho !== undefined) next.usaGuincho = Boolean(patch.usaGuincho);
     if (patch.valorDiaria !== undefined) {
       next.valorDiaria =
@@ -313,7 +321,11 @@ export async function updateOcorrencia(placaInput, patch = {}) {
       }
       next.status = patch.status;
 
-      if (patch.status === "com_mandado") next.temMandado = true;
+      if (patch.status === "com_mandado") {
+        next.temMandado = true;
+        const due = next.proximoContato || current.proximoContato;
+        if (!due || due < todayIso()) next.proximoContato = plusDaysIso(7);
+      }
 
       // Apreensão → pátio; cliente busca no pátio → entregue (fim do CRM).
       // Pagamento é trilha paralela e pode ficar pendente.

@@ -356,6 +356,22 @@
   box-shadow: inset 0 0 0 1px rgba(122, 162, 240, 0.5);
 }
 
+.crm-cal-tag.kind-contato {
+  background: rgba(196, 163, 90, 0.18);
+  color: #e2d0a8;
+}
+
+.crm-cal-tag.kind-mandado {
+  background: rgba(196, 139, 139, 0.22);
+  color: #e8c0c0;
+  font-weight: 700;
+}
+
+.crm-cal-tag.kind-pagamento {
+  background: rgba(122, 162, 240, 0.16);
+  color: #c5d4f5;
+}
+
 .crm-detail-sheet {
   z-index: 80;
 }
