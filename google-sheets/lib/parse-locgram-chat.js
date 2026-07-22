@@ -1,5 +1,6 @@
 import { normalizeAssessoria } from "./assessoria-rules.js";
 import { normalizePlaca, normalizeText } from "./excel-utils.js";
+import { normalizeLocalizador } from "./localizador-rules.js";
 
 const MSG_START =
   /^(\d{1,2}\/\d{1,2}\/\d{2,4})\s+(\d{1,2}:\d{2})\s+-\s+Locgram Atendimento:\s+\*?Nova ocorrência(?:\s*-\s*([^*]+?))?\*?\s*$/i;
@@ -97,7 +98,8 @@ export function parseLocgramChat(text) {
 
     const [, datePart, timePart, locRaw] = m;
     const { dataOcorrencia, dataHora } = parseBrDate(datePart, timePart);
-    const localizador = normalizeText(locRaw);
+    // Sem nome no Locgram = Endrigo
+    const localizador = normalizeLocalizador(locRaw, { emptyAsDefault: true });
 
     let placa = "";
     let veiculo = "";

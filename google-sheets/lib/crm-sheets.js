@@ -16,6 +16,8 @@ import {
   normalizeText,
   toExcelDate,
 } from "./excel-utils.js";
+import { normalizeAssessoria } from "./assessoria-rules.js";
+import { normalizeLocalizador } from "./localizador-rules.js";
 
 function yn(value) {
   if (value === true || value === 1) return "S";
@@ -176,9 +178,9 @@ export function normalizePipelineRecord(raw) {
     cor: normalizeText(raw.cor),
     origem: normalizeText(raw.origem),
     uf: normalizeText(raw.uf).toUpperCase(),
-    assessoria: normalizeText(raw.assessoria),
+    assessoria: normalizeAssessoria(raw.assessoria),
     telefone: normalizeText(raw.telefone),
-    localizador: normalizeText(raw.localizador),
+    localizador: normalizeLocalizador(raw.localizador, { emptyAsDefault: true }),
     status: normalizeText(raw.status) || "nova",
     rastreado: ynBool(raw.rastreado),
     temMandado: ynBool(raw.tem_mandado),

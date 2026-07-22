@@ -1,6 +1,7 @@
 import ExcelJS from "exceljs";
 import { addVehicleToGestor } from "./add-vehicle.js";
 import { normalizeAssessoria } from "./assessoria-rules.js";
+import { normalizeLocalizador } from "./localizador-rules.js";
 import {
   CONTROLE_BRIDGE_STATUSES,
   CRM_STATUS_LABELS,
@@ -137,6 +138,13 @@ function buildCrmPayload(snapshot) {
     CRM_STATUSES.map((s) => [s, byStatus[s]?.length || 0]),
   );
 
+  const localizadores = [
+    ...new Set(pipeline.map((p) => p.localizador).filter(Boolean)),
+  ].sort((a, b) => a.localeCompare(b, "pt-BR"));
+  const assessorias = [
+    ...new Set(pipeline.map((p) => p.assessoria).filter(Boolean)),
+  ].sort((a, b) => a.localeCompare(b, "pt-BR"));
+
   return {
     meta: {
       generatedAt: new Date().toISOString(),
@@ -145,6 +153,7 @@ function buildCrmPayload(snapshot) {
       pagamentoCategorias: PAGAMENTO_CATEGORIA_LABELS,
       pagamentoFormas: PAGAMENTO_FORMA_LABELS,
     },
+    filters: { localizadores, assessorias },
     counts,
     pipeline,
     byStatus,
@@ -194,7 +203,7 @@ function mergeOcorrenciaBody(body = {}) {
     uf: normalizeText(fields.uf).toUpperCase(),
     assessoria: normalizeAssessoria(fields.assessoria),
     telefone: normalizeText(fields.telefone),
-    localizador: normalizeText(fields.localizador),
+    localizador: normalizeLocalizador(fields.localizador),
     status: CRM_STATUSES.includes(fields.status) ? fields.status : "nova",
     rastreado: Boolean(fields.rastreado),
     temMandado: Boolean(fields.temMandado),
@@ -276,6 +285,7 @@ export async function updateOcorrencia(placaInput, patch = {}) {
       if (patch[key] !== undefined) next[key] = normalizeText(patch[key]);
     }
     if (patch.assessoria !== undefined) next.assessoria = normalizeAssessoria(patch.assessoria);
+    if (patch.localizador !== undefined) next.localizador = normalizeLocalizador(patch.localizador);
     if (patch.uf !== undefined) next.uf = normalizeText(patch.uf).toUpperCase();
     if (patch.rastreado !== undefined) next.rastreado = Boolean(patch.rastreado);
     if (patch.temMandado !== undefined) next.temMandado = Boolean(patch.temMandado);

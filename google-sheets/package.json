@@ -8,7 +8,9 @@
     "audit": "node audit-controle.js",
     "sync": "node run-sync.js",
     "api": "node api-server.js",
-    "import:locgram": "node import-locgram-chat.js"
+    "import:locgram": "node import-locgram-chat.js",
+    "normalize:loc": "node normalize-crm-localizadores.js",
+    "normalize:crm": "node normalize-crm-fields.js"
   },
   "dependencies": {
     "dotenv": "^16.4.7",

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { formatBRL } from "../lib/format";
 import NewOcorrenciaSheet from "./NewOcorrenciaSheet";
 import {
@@ -32,24 +32,42 @@ function payTag(ev) {
   const forma = FORMA_LABEL[ev.tipo] || (ev.tipo || "PIX").toUpperCase();
   return `${cat} · ${forma}`;
 }
-function Card({ item, labels, onOpen }) {
+function Card({ item, labels, onOpen, dragging, onDragStart, onDragEnd }) {
   return (
-    <button type="button" className="crm-card" onClick={() => onOpen(item.placa)}>
-      <div className="crm-card-top">
-        <strong className="placa">{item.placa}</strong>
-        {item.rastreado && <span className="tag-rastreado">Rastreado</span>}
+    <article
+      className={`crm-card ${dragging ? "is-dragging" : ""}`}
+      draggable
+      onDragStart={(e) => onDragStart?.(e, item)}
+      onDragEnd={onDragEnd}
+      onClick={() => onOpen(item.placa)}
+    >
+      <div className="crm-card-main">
+        <div className="crm-card-top">
+          <strong className="placa">{item.placa}</strong>
+          {item.rastreado && <span className="tag-rastreado">Rastreado</span>}
+        </div>
+        <p className="crm-card-sub">{item.assessoria || "Sem assessoria"}</p>
+        <p className="crm-card-meta">
+          {item.localizador ? `${item.localizador} · ` : ""}
+          {item.veiculo
+            ? `${item.veiculo.slice(0, 24)}${item.veiculo.length > 24 ? "…" : ""}`
+            : "—"}
+        </p>
+        <div className="crm-card-foot">
+          <span>{labels[item.status] || item.status}</span>
+          <span>Contato {formatShortDate(item.proximoContato)}</span>
+        </div>
       </div>
-      <p className="crm-card-sub">{item.assessoria || "Sem assessoria"}</p>
-      <p className="crm-card-meta">
-        {item.veiculo ? `${item.veiculo.slice(0, 28)}${item.veiculo.length > 28 ? "…" : ""}` : "—"}
-      </p>
-      <div className="crm-card-foot">
-        <span>{labels[item.status] || item.status}</span>
-        <span>Contato {formatShortDate(item.proximoContato)}</span>
-      </div>
-    </button>
+      <span className="crm-card-grip" aria-hidden="true">
+        ⋮⋮
+      </span>
+    </article>
   );
 }
+
+const KANBAN_STATUSES = STATUS_ORDER.filter(
+  (s) => !["entregue", "cancelado", "apreendido", "aguardando_pagamento", "removido"].includes(s),
+);
 
 function buildMonthMatrix(year, month) {
   const first = new Date(year, month, 1);
@@ -99,6 +117,8 @@ export default function CrmPanel({
   onReload,
   runAction,
   searchQuery = "",
+  locFilter = "all",
+  assessoriaFilter = "all",
 }) {
   const [crmTab, setCrmTab] = useState("filas");
   const [selectedPlaca, setSelectedPlaca] = useState(null);
@@ -118,12 +138,28 @@ export default function CrmPanel({
   });
   const [payFilter, setPayFilter] = useState("all");
   const [calFormOpen, setCalFormOpen] = useState(false);
+  const [detailTab, setDetailTab] = useState("resumo");
+  const [dragPlaca, setDragPlaca] = useState(null);
+  const [dragOverStatus, setDragOverStatus] = useState(null);
+  const suppressOpenRef = useRef(false);
 
   const labels = data?.meta?.statusLabels || STATUS_LABELS;
   const pipeline = useMemo(() => {
     const all = data?.pipeline || [];
-    return all.filter((item) => matchesCrmSearch(item, searchQuery, labels));
-  }, [data, searchQuery, labels]);
+    const locNeedle = String(locFilter || "all").trim().toUpperCase();
+    const assNeedle = String(assessoriaFilter || "all").trim().toUpperCase();
+    return all.filter((item) => {
+      if (locNeedle !== "ALL") {
+        const loc = String(item.localizador || "").trim().toUpperCase();
+        if (loc !== locNeedle) return false;
+      }
+      if (assNeedle !== "ALL") {
+        const ass = String(item.assessoria || "").trim().toUpperCase();
+        if (ass !== assNeedle) return false;
+      }
+      return matchesCrmSearch(item, searchQuery, labels);
+    });
+  }, [data, searchQuery, labels, locFilter, assessoriaFilter]);
 
   const pipelinePlacas = useMemo(() => new Set(pipeline.map((p) => p.placa)), [pipeline]);
 
@@ -179,8 +215,60 @@ export default function CrmPanel({
   });
 
   const openDetail = (placa) => {
+    if (suppressOpenRef.current) return;
     setSelectedPlaca(placa);
-    setCrmTab("detalhe");
+    setDetailTab("resumo");
+  };
+
+  const closeDetail = () => {
+    setSelectedPlaca(null);
+    setNote("");
+  };
+
+  useEffect(() => {
+    if (!selectedPlaca) return undefined;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [selectedPlaca]);
+
+  const moveToStatus = async (placa, status) => {
+    const current = (data?.pipeline || []).find((p) => p.placa === placa);
+    if (!current || current.status === status) return;
+    await runAction({ action: "update", placa, status });
+  };
+
+  const onCardDragStart = (e, item) => {
+    suppressOpenRef.current = true;
+    setDragPlaca(item.placa);
+    e.dataTransfer.setData("text/placa", item.placa);
+    e.dataTransfer.setData("text/plain", item.placa);
+    e.dataTransfer.effectAllowed = "move";
+  };
+
+  const onCardDragEnd = () => {
+    setDragPlaca(null);
+    setDragOverStatus(null);
+    window.setTimeout(() => {
+      suppressOpenRef.current = false;
+    }, 80);
+  };
+
+  const onColumnDragOver = (e, status) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    if (dragOverStatus !== status) setDragOverStatus(status);
+  };
+
+  const onColumnDrop = async (e, status) => {
+    e.preventDefault();
+    const placa = e.dataTransfer.getData("text/placa") || dragPlaca;
+    setDragOverStatus(null);
+    setDragPlaca(null);
+    if (!placa || saving) return;
+    await moveToStatus(placa, status);
   };
 
   const openCalForm = (isoDate) => {
@@ -237,7 +325,6 @@ export default function CrmPanel({
             ["followups", "Follow-ups"],
             ["calendario", "Calendário"],
             ["patio", "Pátio"],
-            ...(selected ? [["detalhe", "Detalhe"]] : []),
           ].map(([id, label]) => (
             <button
               key={id}
@@ -263,31 +350,45 @@ export default function CrmPanel({
       )}
 
       {crmTab === "filas" && (
-        <div className="crm-kanban">
-          {STATUS_ORDER.filter(
-            (s) =>
-              !["entregue", "cancelado", "apreendido", "aguardando_pagamento", "removido"].includes(
-                s,
-              ),
-          ).map((status) => {
-            const items = byStatus[status] || [];
-            if (!items.length && ["inapto"].includes(status)) return null;
-            return (
-              <section key={status} className="crm-column">
-                <header>
-                  <h3>{labels[status] || status}</h3>
-                  <span>{items.length}</span>
-                </header>
-                <div className="crm-column-body">
-                  {items.map((item) => (
-                    <Card key={item.placa} item={item} labels={labels} onOpen={openDetail} />
-                  ))}
-                  {!items.length && <p className="crm-empty-col">Vazio</p>}
-                </div>
-              </section>
-            );
-          })}
-        </div>
+        <>
+          <p className="crm-dnd-hint">Arraste o card entre as colunas para mudar o status.</p>
+          <div className="crm-kanban">
+            {KANBAN_STATUSES.map((status) => {
+              const items = byStatus[status] || [];
+              if (!items.length && ["inapto"].includes(status)) return null;
+              return (
+                <section
+                  key={status}
+                  className={`crm-column ${dragOverStatus === status ? "is-drop-target" : ""}`}
+                  onDragOver={(e) => onColumnDragOver(e, status)}
+                  onDragLeave={() => {
+                    if (dragOverStatus === status) setDragOverStatus(null);
+                  }}
+                  onDrop={(e) => onColumnDrop(e, status)}
+                >
+                  <header>
+                    <h3>{labels[status] || status}</h3>
+                    <span>{items.length}</span>
+                  </header>
+                  <div className="crm-column-body">
+                    {items.map((item) => (
+                      <Card
+                        key={item.placa}
+                        item={item}
+                        labels={labels}
+                        onOpen={openDetail}
+                        dragging={dragPlaca === item.placa}
+                        onDragStart={onCardDragStart}
+                        onDragEnd={onCardDragEnd}
+                      />
+                    ))}
+                    {!items.length && <p className="crm-empty-col">Solte aqui</p>}
+                  </div>
+                </section>
+              );
+            })}
+          </div>
+        </>
       )}
 
       {crmTab === "followups" && (
@@ -537,101 +638,316 @@ export default function CrmPanel({
         </div>
       )}
 
-      {crmTab === "detalhe" && selected && (
-        <div className="crm-detail">
-          <div className="crm-detail-head">
-            <div>
-              <p className="placa">{selected.placa}</p>
-              <p className="crm-card-sub">
-                {selected.veiculo || "—"}
-                {selected.cor ? ` · ${selected.cor}` : ""}
-                {selected.uf ? ` · ${selected.uf}` : ""}
-              </p>
-            </div>
-            <div className="crm-detail-tags">
+      {selected && (
+        <div
+          className="sheet-root crm-detail-sheet"
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Detalhe ${selected.placa}`}
+        >
+          <button type="button" className="sheet-backdrop" aria-label="Fechar" onClick={closeDetail} />
+          <div className="sheet sheet-tall">
+            <div className="sheet-handle" />
+            <header className="crm-sheet-head">
+              <div className="crm-sheet-title">
+                <p className="crm-sheet-placa">{selected.placa}</p>
+                <p className="crm-sheet-sub">
+                  {[selected.veiculo, selected.cor, selected.uf].filter(Boolean).join(" · ") ||
+                    "Sem descrição"}
+                </p>
+                <p className="crm-sheet-meta-line">
+                  {selected.localizador || "—"}
+                  {selected.assessoria ? ` · ${selected.assessoria}` : ""}
+                </p>
+              </div>
+              <button type="button" className="crm-sheet-close" onClick={closeDetail} aria-label="Fechar">
+                ✕
+              </button>
+            </header>
+
+            <div className="crm-sheet-chips">
+              <span className="crm-status-chip">{labels[selected.status] || selected.status}</span>
               {selected.rastreado && <span className="tag-rastreado">Rastreado</span>}
               {(data?.pendingByPlaca?.[selected.placa] || []).length > 0 && (
                 <span className="tag-pagamento-pendente">
-                  {(data.pendingByPlaca[selected.placa] || []).length} pag. pendente
+                  {(data.pendingByPlaca[selected.placa] || []).length} pend.
                 </span>
               )}
             </div>
-          </div>
 
-          <div className="vehicle-grid">
-            <div>
-              <span>Assessoria</span>
-              <strong>{selected.assessoria || "—"}</strong>
+            <div className="crm-detail-tabs" role="tablist">
+              {[
+                ["resumo", "Dados"],
+                ["pagamento", "Recebimentos"],
+                ["historico", "Histórico"],
+              ].map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  role="tab"
+                  aria-selected={detailTab === id}
+                  className={detailTab === id ? "is-active" : ""}
+                  onClick={() => setDetailTab(id)}
+                >
+                  {label}
+                </button>
+              ))}
             </div>
-            <div>
-              <span>Telefone</span>
-              <strong>{selected.telefone || "—"}</strong>
-            </div>
-            <div>
-              <span>Status</span>
-              <strong>{labels[selected.status] || selected.status}</strong>
-            </div>
-            <div>
-              <span>Próx. contato</span>
-              <strong>{formatShortDate(selected.proximoContato)}</strong>
-            </div>
-            <div>
-              <span>Pátio</span>
-              <strong>{selected.patio || "—"}</strong>
-            </div>
-            <div>
-              <span>Diárias</span>
-              <strong>{selected.diarias ?? "—"}</strong>
-            </div>
-          </div>
 
-          <div className="crm-actions">
-            <p className="section-hint">
-              Apreensão → pátio → entregue (cliente busca no pátio). Pagamento é à parte e pode ficar
-              em aberto por prazo.
-            </p>
-            <div className="crm-status-actions">
-              {(NEXT_STATUS[selected.status] || []).map((st) => (
+            <div className="sheet-body crm-sheet-body">
+              {detailTab === "resumo" && (
+                <>
+                  <dl className="crm-facts">
+                    <div>
+                      <dt>Próx. contato</dt>
+                      <dd>{formatShortDate(selected.proximoContato)}</dd>
+                    </div>
+                    <div>
+                      <dt>Ocorrência</dt>
+                      <dd>{formatShortDate(selected.dataOcorrencia)}</dd>
+                    </div>
+                    <div>
+                      <dt>Pátio</dt>
+                      <dd>{selected.patio || "—"}</dd>
+                    </div>
+                    <div>
+                      <dt>Diárias</dt>
+                      <dd>{selected.diarias ?? "—"}</dd>
+                    </div>
+                    <div>
+                      <dt>Entrada</dt>
+                      <dd>{formatShortDate(selected.dataEntradaPatio)}</dd>
+                    </div>
+                    <div>
+                      <dt>Origem</dt>
+                      <dd>{selected.origem || "—"}</dd>
+                    </div>
+                  </dl>
+
+                  {selected.telefone && (
+                    <a className="crm-phone-link" href={`tel:${selected.telefone.replace(/\D/g, "")}`}>
+                      {selected.telefone}
+                    </a>
+                  )}
+
+                  <div className="crm-toggle-row">
+                    <button
+                      type="button"
+                      className={`crm-toggle ${selected.rastreado ? "is-on" : ""}`}
+                      disabled={saving}
+                      onClick={() =>
+                        runAction({
+                          action: "update",
+                          placa: selected.placa,
+                          rastreado: !selected.rastreado,
+                        })
+                      }
+                    >
+                      Rastreado
+                    </button>
+                    <button
+                      type="button"
+                      className={`crm-toggle ${selected.usaGuincho ? "is-on" : ""}`}
+                      disabled={saving}
+                      onClick={() =>
+                        runAction({
+                          action: "update",
+                          placa: selected.placa,
+                          usaGuincho: !selected.usaGuincho,
+                        })
+                      }
+                    >
+                      Guincho
+                    </button>
+                    <button
+                      type="button"
+                      className={`crm-toggle ${selected.temMandado ? "is-on" : ""}`}
+                      disabled={saving}
+                      onClick={() =>
+                        runAction({
+                          action: "update",
+                          placa: selected.placa,
+                          temMandado: !selected.temMandado,
+                        })
+                      }
+                    >
+                      Mandado
+                    </button>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-block"
+                    disabled={saving || selected.noControle}
+                    onClick={() =>
+                      runAction({
+                        action: "bridge",
+                        placa: selected.placa,
+                        overwrite: true,
+                      })
+                    }
+                  >
+                    {selected.noControle ? "Já está no Controle" : "Enviar ao Controle"}
+                  </button>
+                </>
+              )}
+
+              {detailTab === "pagamento" && (
+                <>
+                  <div className="filter-row">
+                    <div className="filter">
+                      <label>Data</label>
+                      <input
+                        type="date"
+                        value={payForm.dataPrevista}
+                        onChange={(e) => setPayForm((p) => ({ ...p, dataPrevista: e.target.value }))}
+                      />
+                    </div>
+                    <div className="filter">
+                      <label>Tipo</label>
+                      <select
+                        value={payForm.categoria}
+                        onChange={(e) => setPayForm((p) => ({ ...p, categoria: e.target.value }))}
+                      >
+                        {PAY_CATEGORIAS.map(([id, label]) => (
+                          <option key={id} value={id}>
+                            {label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="filter">
+                      <label>Forma</label>
+                      <select
+                        value={payForm.tipo}
+                        onChange={(e) => setPayForm((p) => ({ ...p, tipo: e.target.value }))}
+                      >
+                        {PAY_FORMAS.map(([id, label]) => (
+                          <option key={id} value={id}>
+                            {label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="filter">
+                    <label>Valor</label>
+                    <input
+                      inputMode="decimal"
+                      value={payForm.valor}
+                      onChange={(e) => setPayForm((p) => ({ ...p, valor: e.target.value }))}
+                      placeholder="0,00"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-block"
+                    disabled={saving}
+                    onClick={() =>
+                      runAction({
+                        action: "pagamento",
+                        ...payForm,
+                        placa: selected.placa,
+                        assessoria: selected.assessoria,
+                        pago: false,
+                      })
+                    }
+                  >
+                    Agendar recebimento
+                  </button>
+                  <div className="crm-pay-list">
+                    {pagamentosPlaca.map((p) => (
+                      <div key={p.id} className="crm-pay-item">
+                        <div>
+                          <strong>
+                            {payTag(p)} · {formatShortDate(p.dataPrevista)}
+                          </strong>
+                          <span>{p.valor != null ? formatBRL(p.valor) : "—"}</span>
+                        </div>
+                        <button
+                          type="button"
+                          className="link-more"
+                          disabled={saving || p.pago}
+                          onClick={() =>
+                            runAction({
+                              action: "pagamento",
+                              id: p.id,
+                              placa: p.placa,
+                              dataPrevista: p.dataPrevista,
+                              categoria: p.categoria,
+                              tipo: p.tipo,
+                              assessoria: p.assessoria,
+                              valor: p.valor,
+                              nota: p.nota,
+                              pago: true,
+                            })
+                          }
+                        >
+                          {p.pago ? "Pago" : "Marcar pago"}
+                        </button>
+                      </div>
+                    ))}
+                    {!pagamentosPlaca.length && (
+                      <p className="section-hint">Nenhum recebimento agendado.</p>
+                    )}
+                  </div>
+                </>
+              )}
+
+              {detailTab === "historico" && (
+                <>
+                  <div className="crm-note-box">
+                    <textarea
+                      rows={2}
+                      value={note}
+                      onChange={(e) => setNote(e.target.value)}
+                      placeholder="Escreva uma nota…"
+                    />
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      disabled={saving || !note.trim()}
+                      onClick={async () => {
+                        await runAction({
+                          action: "timeline",
+                          placa: selected.placa,
+                          tipo: "nota",
+                          mensagem: note.trim(),
+                        });
+                        setNote("");
+                      }}
+                    >
+                      Salvar
+                    </button>
+                  </div>
+                  <div className="crm-timeline">
+                    {timeline.map((t) => (
+                      <div key={t.id} className="crm-timeline-item">
+                        <div className="crm-timeline-meta">
+                          <span className="crm-timeline-type">{t.tipo}</span>
+                          <small>{formatDateTime(t.dataHora)}</small>
+                        </div>
+                        <p>{t.mensagem}</p>
+                      </div>
+                    ))}
+                    {!timeline.length && <p className="section-hint">Sem eventos ainda.</p>}
+                  </div>
+                </>
+              )}
+            </div>
+
+            <div className="sheet-foot crm-sheet-foot">
+              {(NEXT_STATUS[selected.status] || []).slice(0, 2).map((st) => (
                 <button
                   key={st}
                   type="button"
-                  className="btn btn-ghost"
+                  className="btn btn-primary"
                   disabled={saving}
-                  onClick={() => runAction({ action: "update", placa: selected.placa, status: st })}
+                  onClick={() => moveToStatus(selected.placa, st)}
                 >
                   {NEXT_STATUS_ACTION_LABELS[st] || labels[st] || st}
                 </button>
               ))}
-            </div>
-            <div className="crm-flag-row">
-              <button
-                type="button"
-                className="btn btn-ghost"
-                disabled={saving}
-                onClick={() =>
-                  runAction({
-                    action: "update",
-                    placa: selected.placa,
-                    rastreado: !selected.rastreado,
-                  })
-                }
-              >
-                {selected.rastreado ? "Remover rastreado" : "Marcar rastreado"}
-              </button>
-              <button
-                type="button"
-                className="btn btn-ghost"
-                disabled={saving}
-                onClick={() =>
-                  runAction({
-                    action: "update",
-                    placa: selected.placa,
-                    usaGuincho: !selected.usaGuincho,
-                  })
-                }
-              >
-                Guincho: {selected.usaGuincho ? "sim" : "não"}
-              </button>
               <button
                 type="button"
                 className="btn btn-ghost"
@@ -645,167 +961,11 @@ export default function CrmPanel({
                   })
                 }
               >
-                Registrar contato (+7 dias)
+                Contato +7d
               </button>
             </div>
           </div>
-
-          <div className="panel panel-soft">
-            <h3>Pagamento previsto</h3>
-            <p className="section-hint">
-              Independente do pátio: Apreensão, Guincho, Estadia ou Plus — com forma PIX / recibo /
-              NF.
-            </p>
-            <div className="filter-row">
-              <div className="filter">
-                <label>Data</label>
-                <input
-                  type="date"
-                  value={payForm.dataPrevista}
-                  onChange={(e) => setPayForm((p) => ({ ...p, dataPrevista: e.target.value }))}
-                />
-              </div>
-              <div className="filter">
-                <label>Recebimento</label>
-                <select
-                  value={payForm.categoria}
-                  onChange={(e) => setPayForm((p) => ({ ...p, categoria: e.target.value }))}
-                >
-                  {PAY_CATEGORIAS.map(([id, label]) => (
-                    <option key={id} value={id}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="filter">
-                <label>Forma</label>
-                <select
-                  value={payForm.tipo}
-                  onChange={(e) => setPayForm((p) => ({ ...p, tipo: e.target.value }))}
-                >
-                  {PAY_FORMAS.map(([id, label]) => (
-                    <option key={id} value={id}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-            <div className="filter">
-              <label>Valor</label>
-              <input
-                inputMode="decimal"
-                value={payForm.valor}
-                onChange={(e) => setPayForm((p) => ({ ...p, valor: e.target.value }))}
-              />
-            </div>
-            <button
-              type="button"
-              className="btn btn-primary btn-block"
-              disabled={saving}
-              onClick={() =>
-                runAction({
-                  action: "pagamento",
-                  ...payForm,
-                  placa: selected.placa,
-                  assessoria: selected.assessoria,
-                  pago: false,
-                })
-              }
-            >
-              Agendar recebimento
-            </button>
-            <div className="crm-pay-list">
-              {pagamentosPlaca.map((p) => (
-                <div key={p.id} className="crm-pay-item">
-                  <div>
-                    <strong>
-                      {payTag(p)} · {formatShortDate(p.dataPrevista)}
-                    </strong>
-                    <span>{p.valor != null ? formatBRL(p.valor) : "—"}</span>
-                  </div>
-                  <button
-                    type="button"
-                    className="link-more"
-                    disabled={saving || p.pago}
-                    onClick={() =>
-                      runAction({
-                        action: "pagamento",
-                        id: p.id,
-                        placa: p.placa,
-                        dataPrevista: p.dataPrevista,
-                        categoria: p.categoria,
-                        tipo: p.tipo,
-                        assessoria: p.assessoria,
-                        valor: p.valor,
-                        nota: p.nota,
-                        pago: true,
-                      })
-                    }
-                  >
-                    {p.pago ? "Pago" : "Marcar pago"}
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="panel panel-soft">
-            <h3>Timeline</h3>
-            <div className="filter">
-              <label>Nova nota</label>
-              <textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} />
-            </div>
-            <button
-              type="button"
-              className="btn btn-ghost btn-block"
-              disabled={saving || !note.trim()}
-              onClick={async () => {
-                await runAction({
-                  action: "timeline",
-                  placa: selected.placa,
-                  tipo: "nota",
-                  mensagem: note.trim(),
-                });
-                setNote("");
-              }}
-            >
-              Adicionar nota
-            </button>
-            <div className="crm-timeline">
-              {timeline.map((t) => (
-                <div key={t.id} className="crm-timeline-item">
-                  <span className="crm-timeline-type">{t.tipo}</span>
-                  <p>{t.mensagem}</p>
-                  <small>{formatDateTime(t.dataHora)}</small>
-                </div>
-              ))}
-              {!timeline.length && <p className="section-hint">Sem eventos ainda.</p>}
-            </div>
-          </div>
-
-          <div className="crm-bridge">
-            <button
-              type="button"
-              className="btn btn-primary btn-block"
-              disabled={saving || selected.noControle}
-              onClick={() =>
-                runAction({
-                  action: "bridge",
-                  placa: selected.placa,
-                  overwrite: true,
-                })
-              }
-            >
-              {selected.noControle ? "Já no Controle" : "Enviar ao Controle Diligências"}
-            </button>
-          </div>
         </div>
-      )}
-
-      {crmTab === "detalhe" && !selected && (
-        <div className="empty-state">Selecione um veículo nas filas.</div>
       )}
 
       <NewOcorrenciaSheet

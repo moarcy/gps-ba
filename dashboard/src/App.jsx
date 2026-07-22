@@ -296,7 +296,15 @@ export default function App() {
           onChange={(e) => setAssessoria(e.target.value)}
         >
           <option value="all">Todas</option>
-          {(data?.filters?.assessorias || []).map((name) => (
+          {(tab === "crm"
+            ? [
+                ...new Set([
+                  ...(data?.filters?.assessorias || []),
+                  ...(crm.data?.filters?.assessorias || []),
+                ]),
+              ].sort((a, b) => a.localeCompare(b, "pt-BR"))
+            : data?.filters?.assessorias || []
+          ).map((name) => (
             <option key={name} value={name}>
               {name}
             </option>
@@ -307,7 +315,15 @@ export default function App() {
         <label htmlFor="loc1">Localizador</label>
         <select id="loc1" value={loc1} onChange={(e) => setLoc1(e.target.value)}>
           <option value="all">Todos</option>
-          {(data?.filters?.localizadores || []).map((name) => (
+          {(tab === "crm"
+            ? [
+                ...new Set([
+                  ...(data?.filters?.localizadores || []),
+                  ...(crm.data?.filters?.localizadores || []),
+                ]),
+              ].sort((a, b) => a.localeCompare(b, "pt-BR"))
+            : data?.filters?.localizadores || []
+          ).map((name) => (
             <option key={name} value={name}>
               {name}
             </option>
@@ -712,6 +728,8 @@ export default function App() {
             onReload={crm.reload}
             runAction={crm.runAction}
             searchQuery={q}
+            locFilter={loc1}
+            assessoriaFilter={assessoria}
           />
         </section>
       </main>
