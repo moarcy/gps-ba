@@ -13,6 +13,7 @@ import {
 } from "./crm-constants.js";
 import {
   appendTimelineRow,
+  daysBetween,
   ensureCrmSheets,
   readPagamentos,
   readPipeline,
@@ -92,12 +93,17 @@ async function loadCrmSnapshot({ persistIfCreated = true, enrichFromControle = t
   }
 
   if ((created || dirtyRows.length) && persistIfCreated) {
-    for (const item of dirtyRows) {
-      upsertPipelineRow(sheets.pipeline, item);
+    try {
+      for (const item of dirtyRows) {
+        upsertPipelineRow(sheets.pipeline, item);
+      }
+      workbook.calcProperties.fullCalcOnLoad = true;
+      await workbook.xlsx.writeFile(localPath);
+      await uploadExcel(gestorId, localPath);
+    } catch (err) {
+      console.error("Falha ao persistir sync CRM←Controle:", err.message || err);
+      // Continua com payload em memória para a UI não ficar vazia
     }
-    workbook.calcProperties.fullCalcOnLoad = true;
-    await workbook.xlsx.writeFile(localPath);
-    await uploadExcel(gestorId, localPath);
   }
 
   return {
@@ -110,10 +116,46 @@ async function loadCrmSnapshot({ persistIfCreated = true, enrichFromControle = t
 /**
  * Data do Controle = entrada no pátio.
  * BIRA → BF Car · MACIEL → Ponto a Ponto.
+ * Carros do Controle que ainda não estão no CRM entram como no_patio.
  */
+function occFromControle(c) {
+  const loc = normalizeLocalizador(c.loc1);
+  const entrada = toIsoDate(c.data) || todayIso();
+  const patio = resolvePatio({ localizador: loc });
+  return {
+    placa: c.placa,
+    dataOcorrencia: entrada,
+    veiculo: "",
+    cor: "",
+    origem: "",
+    uf: "",
+    assessoria: normalizeAssessoria(c.assessoria),
+    telefone: normalizeText(c.contato),
+    localizador: loc,
+    status: "no_patio",
+    rastreado: false,
+    temMandado: false,
+    usaGuincho: false,
+    patio,
+    dataApreensao: entrada,
+    dataEntradaPatio: entrada,
+    dataSaidaPatio: null,
+    valorDiaria: null,
+    diarias: daysBetween(entrada, null),
+    proximoContato: null,
+    observacoes: "Sincronizado do Controle de Diligências",
+    rawWhatsapp: "",
+    noControle: true,
+    atualizadoEm: new Date().toISOString(),
+  };
+}
+
 function enrichPipelineFromControle(pipeline, controleMap) {
   const changed = [];
+  const seen = new Set();
+
   const next = pipeline.map((item) => {
+    seen.add(item.placa);
     const c = controleMap.get(item.placa);
     let updated = item;
     let dirty = false;
@@ -135,7 +177,6 @@ function enrichPipelineFromControle(pipeline, controleMap) {
       }
     }
 
-    // Localizador do Controle se CRM estiver vazio
     if (!item.localizador && c?.loc1) {
       const locNorm = normalizeLocalizador(c.loc1);
       if (locNorm) {
@@ -148,7 +189,7 @@ function enrichPipelineFromControle(pipeline, controleMap) {
       }
     }
 
-    // Carros no Controle estão no pátio (exceto já finalizados)
+    // Carros no Controle estão no pátio (exceto já finalizados no CRM)
     if (
       c &&
       !["entregue", "cancelado", "removido"].includes(updated.status) &&
@@ -159,6 +200,12 @@ function enrichPipelineFromControle(pipeline, controleMap) {
         const entrada = toIsoDate(c.data);
         if (entrada) updated = { ...updated, dataEntradaPatio: entrada };
       }
+      if (!updated.patio) {
+        updated = {
+          ...updated,
+          patio: resolvePatio({ localizador: updated.localizador || c.loc1 }),
+        };
+      }
       dirty = true;
     } else if (c && !item.noControle) {
       updated = { ...updated, noControle: true };
@@ -166,11 +213,23 @@ function enrichPipelineFromControle(pipeline, controleMap) {
     }
 
     if (dirty) {
-      updated = { ...updated, atualizadoEm: new Date().toISOString() };
+      updated = {
+        ...updated,
+        diarias: daysBetween(updated.dataEntradaPatio, updated.dataSaidaPatio),
+        atualizadoEm: new Date().toISOString(),
+      };
       changed.push(updated);
     }
     return updated;
   });
+
+  // Controle tem carros que o CRM (Locgram) ainda não tem → entram no pátio
+  for (const [placa, c] of controleMap) {
+    if (seen.has(placa)) continue;
+    const created = occFromControle(c);
+    next.push(created);
+    changed.push(created);
+  }
 
   return { pipeline: next, changed };
 }
