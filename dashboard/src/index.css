@@ -584,7 +584,7 @@ button:disabled {
   bottom: calc(10px + var(--safe-bottom));
   z-index: 30;
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 4px;
   padding: 8px;
   background: rgba(22, 28, 35, 0.96);
@@ -750,7 +750,8 @@ button:disabled {
 }
 
 .filter select,
-.filter input {
+.filter input,
+.filter textarea {
   width: 100%;
   background: var(--ink-2);
   border: 1px solid var(--line);
@@ -758,6 +759,12 @@ button:disabled {
   border-radius: 12px;
   padding: 12px;
   min-height: 44px;
+}
+
+.filter textarea {
+  min-height: 96px;
+  resize: vertical;
+  font: inherit;
 }
 
 .btn {

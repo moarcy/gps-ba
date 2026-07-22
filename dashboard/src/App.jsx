@@ -10,6 +10,8 @@ import {
   YAxis,
 } from "recharts";
 import AddVehicleSheet from "./AddVehicleSheet";
+import CrmPanel from "./crm/CrmPanel";
+import { useCrm } from "./hooks/useCrm";
 import { useDashboard } from "./hooks/useDashboard";
 import { formatBRL, formatDate } from "./lib/format";
 import "./index.css";
@@ -106,8 +108,21 @@ function IconPlus() {
   );
 }
 
+function IconCrm() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        fill="currentColor"
+        d="M4 5.5h16v2.2H4V5.5Zm0 5.4h10v2.2H4v-2.2Zm0 5.4h16V18.5H4v-2.2Zm12.2-5.4H20v2.2h-3.8v-2.2Z"
+      />
+    </svg>
+  );
+}
+
 export default function App() {
   const { data, loading, error, reload } = useDashboard();
+  const [tab, setTab] = useState("resumo");
+  const crm = useCrm({ enabled: tab === "crm" });
   const [month, setMonth] = useState("all");
   const [assessoria, setAssessoria] = useState("all");
   const [loc1, setLoc1] = useState("all");
@@ -115,7 +130,6 @@ export default function App() {
   const [q, setQ] = useState("");
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
-  const [tab, setTab] = useState("resumo");
   const [semPremioOnly, setSemPremioOnly] = useState(false);
 
   useEffect(() => {
@@ -671,6 +685,18 @@ export default function App() {
             ))}
           </div>
         </section>
+
+        {/* CRM */}
+        <section className={`tab-panel ${tab === "crm" ? "is-active" : ""}`}>
+          <CrmPanel
+            data={crm.data}
+            loading={crm.loading}
+            error={crm.error}
+            saving={crm.saving}
+            onReload={crm.reload}
+            runAction={crm.runAction}
+          />
+        </section>
       </main>
 
       {/* Mobile bottom nav */}
@@ -682,6 +708,14 @@ export default function App() {
         >
           <IconHome />
           <span>Resumo</span>
+        </button>
+        <button
+          type="button"
+          className={tab === "crm" ? "is-active" : ""}
+          onClick={() => setTab("crm")}
+        >
+          <IconCrm />
+          <span>CRM</span>
         </button>
         <button
           type="button"

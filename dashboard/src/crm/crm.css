@@ -1,0 +1,337 @@
+/* CRM module */
+.crm-root {
+  display: grid;
+  gap: 12px;
+}
+
+.crm-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.crm-subnav {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.crm-subnav button,
+.crm-mode-tabs button,
+.crm-pay-filters button {
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--sand-dim);
+  border-radius: 999px;
+  padding: 8px 12px;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.crm-subnav button.is-active,
+.crm-mode-tabs button.is-active,
+.crm-pay-filters button.is-active {
+  color: var(--sand);
+  background: rgba(122, 162, 240, 0.16);
+  border-color: rgba(122, 162, 240, 0.35);
+}
+
+.crm-mode-tabs,
+.crm-pay-filters {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.crm-kanban {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(200px, 78vw);
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+  scroll-snap-type: x mandatory;
+}
+
+.crm-column {
+  scroll-snap-align: start;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  min-height: 220px;
+  display: flex;
+  flex-direction: column;
+}
+
+.crm-column header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 12px 8px;
+}
+
+.crm-column h3 {
+  margin: 0;
+  font-size: 0.86rem;
+  font-weight: 600;
+}
+
+.crm-column header span {
+  color: var(--sand-dim);
+  font-size: 0.8rem;
+}
+
+.crm-column-body {
+  padding: 0 10px 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.crm-card {
+  text-align: left;
+  border-radius: 14px;
+  padding: 12px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  color: inherit;
+}
+
+.crm-card-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+}
+
+.crm-card-sub,
+.crm-card-meta {
+  margin: 4px 0 0;
+  color: var(--sand-dim);
+  font-size: 0.8rem;
+}
+
+.crm-card-foot {
+  margin-top: 10px;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.72rem;
+  color: var(--sand-dim);
+}
+
+.tag-rastreado {
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: #7aa2f0;
+  border: 1px solid rgba(122, 162, 240, 0.35);
+  background: rgba(122, 162, 240, 0.12);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+
+.crm-empty-col {
+  margin: 0;
+  padding: 12px;
+  color: var(--sand-dim);
+  font-size: 0.82rem;
+}
+
+.crm-list {
+  display: grid;
+  gap: 8px;
+}
+
+.crm-follow-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  text-align: left;
+  padding: 14px;
+  border-radius: 14px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  color: inherit;
+}
+
+.crm-follow-row span {
+  display: block;
+  margin-top: 4px;
+  color: var(--sand-dim);
+  font-size: 0.82rem;
+}
+
+.crm-follow-right {
+  text-align: right;
+  display: grid;
+  gap: 4px;
+  justify-items: end;
+}
+
+.urgency-atrasado {
+  border-color: rgba(196, 139, 139, 0.45);
+  background: rgba(196, 139, 139, 0.08);
+}
+
+.urgency-hoje {
+  border-color: rgba(196, 163, 90, 0.45);
+  background: rgba(196, 163, 90, 0.08);
+}
+
+.urgency-label {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 0.68rem !important;
+}
+
+.crm-calendar {
+  display: grid;
+  gap: 10px;
+}
+
+.crm-cal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.crm-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.crm-cal-dow {
+  text-align: center;
+  font-size: 0.72rem;
+  color: var(--sand-dim);
+  padding: 4px 0;
+}
+
+.crm-cal-cell {
+  min-height: 72px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.crm-cal-cell.is-empty {
+  opacity: 0.25;
+}
+
+.crm-cal-day {
+  font-size: 0.75rem;
+  color: var(--sand-dim);
+}
+
+.crm-cal-tag {
+  font-size: 0.62rem;
+  line-height: 1.2;
+  text-align: left;
+  border-radius: 6px;
+  padding: 3px 4px;
+  background: rgba(122, 162, 240, 0.16);
+  color: #c5d4f5;
+  border: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.crm-cal-tag.is-paid {
+  background: rgba(111, 155, 132, 0.2);
+  color: #a8c4b4;
+}
+
+.crm-cal-tag.is-tracked {
+  box-shadow: inset 0 0 0 1px rgba(122, 162, 240, 0.5);
+}
+
+.crm-detail {
+  display: grid;
+  gap: 12px;
+}
+
+.crm-detail-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 14px;
+  border-radius: 16px;
+  background: var(--card);
+  border: 1px solid var(--line);
+}
+
+.crm-detail h3 {
+  margin: 0 0 10px;
+  font-size: 0.95rem;
+}
+
+.crm-actions,
+.crm-bridge {
+  display: grid;
+  gap: 8px;
+}
+
+.crm-status-actions,
+.crm-flag-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.crm-pay-list,
+.crm-timeline {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.crm-pay-item,
+.crm-timeline-item {
+  padding: 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--line);
+}
+
+.crm-pay-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+}
+
+.crm-pay-item span,
+.crm-timeline-item small {
+  display: block;
+  margin-top: 4px;
+  color: var(--sand-dim);
+  font-size: 0.8rem;
+}
+
+.crm-timeline-type {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 0.68rem;
+  color: #7aa2f0;
+}
+
+.crm-timeline-item p {
+  margin: 6px 0 0;
+  white-space: pre-wrap;
+  font-size: 0.88rem;
+}
+
+@media (min-width: 901px) {
+  .crm-kanban {
+    grid-auto-columns: minmax(220px, 1fr);
+  }
+}

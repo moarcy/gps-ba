@@ -47,3 +47,10 @@ A UI chama `/api/dashboard`, servida pela function em `api/dashboard.js`.
 ### Adicionar veículo
 
 No header, use **+**. O `POST /api/vehicles` grava na planilha do **gestor** (`Planilha1`), fonte do sync.
+
+### CRM de diligências
+
+Aba **CRM** no app. Dados nas abas `CRM Pipeline`, `CRM Timeline` e `CRM Pagamentos` da planilha do gestor.
+
+- `GET /api/crm` — filas, follow-ups, pátio, pagamentos, timeline  
+- `POST /api/crm` — `action`: `create` | `update` | `timeline` | `pagamento` | `bridge` | `preview`
