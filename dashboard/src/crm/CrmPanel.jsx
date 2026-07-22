@@ -416,10 +416,9 @@ export default function CrmPanel({
   const moveToStatus = async (placa, status) => {
     const current = (data?.pipeline || []).find((p) => p.placa === placa);
     if (!current || current.status === status) return;
-    // Otimista: card já muda de coluna; API confirma em seguida
     setStatusOverrides((prev) => ({ ...prev, [placa]: status }));
     try {
-      await runAction({ action: "update", placa, status });
+      await runAction({ action: "update", placa, status }, { soft: true });
     } catch {
       setStatusOverrides((prev) => {
         const next = { ...prev };

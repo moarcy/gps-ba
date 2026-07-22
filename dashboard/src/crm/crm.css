@@ -114,6 +114,8 @@ body.crm-dragging .crm-kanban {
   gap: 8px;
   min-height: 80px;
   flex: 1;
+  align-content: start;
+  grid-auto-rows: max-content;
 }
 
 .crm-card {
@@ -126,6 +128,9 @@ body.crm-dragging .crm-kanban {
   touch-action: none;
   cursor: grab;
   -webkit-user-drag: none;
+  align-self: start;
+  width: 100%;
+  height: auto;
 }
 
 .crm-card:active {
