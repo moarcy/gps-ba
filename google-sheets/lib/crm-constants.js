@@ -12,6 +12,7 @@ export const CRM_STATUSES = [
   "no_patio",
   "aguardando_pagamento",
   "removido",
+  "entregue",
   "cancelado",
 ];
 
@@ -24,7 +25,8 @@ export const CRM_STATUS_LABELS = {
   apreendido: "Apreendido",
   no_patio: "No pátio",
   aguardando_pagamento: "Aguardando pagamento",
-  removido: "Removido",
+  removido: "Removido do pátio",
+  entregue: "Entregue",
   cancelado: "Cancelado",
 };
 
@@ -40,6 +42,7 @@ export const CONTROLE_BRIDGE_STATUSES = new Set([
   "no_patio",
   "aguardando_pagamento",
   "removido",
+  "entregue",
 ]);
 
 export const PIPELINE_HEADERS = [

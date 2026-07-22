@@ -119,7 +119,7 @@ function buildCrmPayload(snapshot) {
     .filter(
       (p) =>
         p.status === "no_patio" ||
-        (p.dataEntradaPatio && !p.dataSaidaPatio && p.status !== "removido"),
+        (p.dataEntradaPatio && !p.dataSaidaPatio && p.status !== "removido" && p.status !== "entregue"),
     )
     .sort(sortByPriority);
 
@@ -301,7 +301,8 @@ export async function updateOcorrencia(placaInput, patch = {}) {
       if (patch.status === "com_mandado") next.temMandado = true;
 
       // Apreensão sempre vai para o pátio e fica até ser removido.
-      // Pagamento é trilha paralela (CRM Pagamentos) e pode ficar pendente depois.
+      // Depois da remoção, o CRM só fecha em "entregue".
+      // Pagamento é trilha paralela e pode ficar pendente.
       if (patch.status === "apreendido") {
         next.status = "no_patio";
         if (!next.dataApreensao) next.dataApreensao = todayIso();
@@ -311,11 +312,15 @@ export async function updateOcorrencia(placaInput, patch = {}) {
         if (!next.dataApreensao) next.dataApreensao = todayIso();
         if (!next.dataEntradaPatio) next.dataEntradaPatio = todayIso();
         // Reabertura no pátio: limpa saída
-        if (prevStatus === "removido" || prevStatus === "aguardando_pagamento") {
+        if (
+          prevStatus === "removido" ||
+          prevStatus === "entregue" ||
+          prevStatus === "aguardando_pagamento"
+        ) {
           next.dataSaidaPatio = null;
         }
       }
-      if (patch.status === "removido") {
+      if (patch.status === "removido" || patch.status === "entregue") {
         if (!next.dataEntradaPatio && next.dataApreensao) {
           next.dataEntradaPatio = next.dataApreensao;
         }

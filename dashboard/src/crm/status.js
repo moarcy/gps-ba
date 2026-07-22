@@ -8,6 +8,7 @@ export const STATUS_ORDER = [
   "no_patio",
   "aguardando_pagamento",
   "removido",
+  "entregue",
   "cancelado",
 ];
 
@@ -21,6 +22,7 @@ export const STATUS_LABELS = {
   no_patio: "No pátio",
   aguardando_pagamento: "Pagamento",
   removido: "Removido",
+  entregue: "Entregue",
   cancelado: "Cancelado",
 };
 
@@ -30,11 +32,13 @@ export const NEXT_STATUS = {
   com_mandado: ["apreendido", "indisponivel_temp", "cancelado"],
   indisponivel_temp: ["aguardando_mandado", "com_mandado", "inapto", "cancelado"],
   inapto: ["cancelado", "aguardando_mandado"],
-  // Apreensão sempre entra no pátio; pagamento roda em paralelo (aba Pagamentos).
+  // Apreensão → pátio → remoção → entregue (fim do CRM).
+  // Pagamento segue em paralelo e pode ficar pendente.
   apreendido: ["no_patio"],
   no_patio: ["removido"],
   aguardando_pagamento: ["no_patio", "removido"],
-  removido: [],
+  removido: ["entregue"],
+  entregue: [],
   cancelado: ["nova"],
 };
 
@@ -42,6 +46,7 @@ export const NEXT_STATUS = {
 export const NEXT_STATUS_ACTION_LABELS = {
   apreendido: "Apreender → pátio",
   removido: "Remover do pátio",
+  entregue: "Marcar entregue",
   no_patio: "Voltar ao pátio",
 };
 

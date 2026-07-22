@@ -141,7 +141,7 @@ export default function CrmPanel({ data, loading, error, saving, onReload, runAc
       {crmTab === "filas" && (
         <div className="crm-kanban">
           {STATUS_ORDER.filter(
-            (s) => !["removido", "cancelado", "apreendido", "aguardando_pagamento"].includes(s),
+            (s) => !["entregue", "cancelado", "apreendido", "aguardando_pagamento"].includes(s),
           ).map((status) => {
             const items = byStatus[status] || [];
             if (!items.length && ["inapto"].includes(status)) return null;
@@ -350,8 +350,8 @@ export default function CrmPanel({ data, loading, error, saving, onReload, runAc
 
           <div className="crm-actions">
             <p className="section-hint">
-              Apreensão envia ao pátio. Remoção encerra diárias. Pagamento segue em paralelo e pode
-              ficar em aberto por prazo.
+              Apreensão → pátio → remoção → entregue (fim). Pagamento segue em paralelo e pode ficar
+              em aberto por prazo.
             </p>
             <div className="crm-status-actions">
               {(NEXT_STATUS[selected.status] || []).map((st) => (
