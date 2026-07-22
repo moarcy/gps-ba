@@ -53,9 +53,18 @@
   gap: 10px;
   overflow-x: auto;
   padding-bottom: 8px;
-  scroll-snap-type: x mandatory;
+  scroll-snap-type: x proximity;
   position: relative;
-  touch-action: pan-x;
+}
+
+body.crm-dragging {
+  cursor: grabbing !important;
+  user-select: none !important;
+  touch-action: none;
+}
+
+body.crm-dragging .crm-kanban {
+  scroll-snap-type: none;
 }
 
 .crm-dnd-hint {
@@ -76,8 +85,8 @@
 }
 
 .crm-column.is-drop-target {
-  border-color: rgba(122, 162, 240, 0.55);
-  background: rgba(122, 162, 240, 0.08);
+  border-color: rgba(122, 162, 240, 0.7);
+  background: rgba(122, 162, 240, 0.12);
 }
 
 .crm-column header {
@@ -85,6 +94,7 @@
   justify-content: space-between;
   align-items: center;
   padding: 12px 12px 8px;
+  pointer-events: none;
 }
 
 .crm-column h3 {
@@ -103,6 +113,7 @@
   display: grid;
   gap: 8px;
   min-height: 80px;
+  flex: 1;
 }
 
 .crm-card {
@@ -114,18 +125,30 @@
   user-select: none;
   touch-action: none;
   cursor: grab;
+  -webkit-user-drag: none;
 }
 
 .crm-card:active {
   cursor: grabbing;
 }
 
-.crm-card.is-dragging {
-  opacity: 0.45;
-  border-color: rgba(122, 162, 240, 0.55);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
-  transform: scale(1.02);
-  z-index: 2;
+.crm-card.is-drag-source {
+  opacity: 0.28;
+}
+
+.crm-card-ghost {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 9999;
+  margin: 0;
+  pointer-events: none !important;
+  opacity: 0.95;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+  border-color: rgba(122, 162, 240, 0.65);
+  transform-origin: top left;
+  will-change: transform;
+  cursor: grabbing;
 }
 
 .crm-card-main {
@@ -134,6 +157,7 @@
   text-align: left;
   padding: 12px;
   color: inherit;
+  pointer-events: none;
 }
 
 .crm-card-drag-hint {

@@ -33,65 +33,149 @@ function payTag(ev) {
   const forma = FORMA_LABEL[ev.tipo] || (ev.tipo || "PIX").toUpperCase();
   return `${cat} · ${forma}`;
 }
+
 function statusFromPoint(clientX, clientY) {
   const el = document.elementFromPoint(clientX, clientY);
   return el?.closest("[data-crm-status]")?.getAttribute("data-crm-status") || null;
 }
 
-function Card({ item, labels, onOpen, dragging, onDragMove, onDragEnd }) {
-  const pointerRef = useRef(null);
+function clearDropHighlights() {
+  document.querySelectorAll(".crm-column.is-drop-target").forEach((el) => {
+    el.classList.remove("is-drop-target");
+  });
+}
 
-  const finishPointer = (e, moved) => {
-    const start = pointerRef.current;
-    pointerRef.current = null;
-    try {
-      e.currentTarget.releasePointerCapture(e.pointerId);
-    } catch {
-      /* already released */
-    }
-    if (moved) {
-      e.currentTarget.style.pointerEvents = "none";
-      const status = statusFromPoint(e.clientX, e.clientY);
-      e.currentTarget.style.pointerEvents = "";
-      onDragEnd?.(item, status);
+function highlightDropStatus(status) {
+  document.querySelectorAll("[data-crm-status]").forEach((el) => {
+    el.classList.toggle("is-drop-target", el.getAttribute("data-crm-status") === status);
+  });
+}
+
+function Card({ item, labels, onOpen, onMoveToStatus }) {
+  const cardRef = useRef(null);
+  const sessionRef = useRef(null);
+
+  useEffect(() => {
+    return () => {
+      const s = sessionRef.current;
+      if (!s) return;
+      window.removeEventListener("pointermove", s.onMove);
+      window.removeEventListener("pointerup", s.onUp);
+      window.removeEventListener("pointercancel", s.onUp);
+      s.ghost?.remove();
+      s.sourceEl?.classList.remove("is-drag-source");
+      clearDropHighlights();
+      sessionRef.current = null;
+    };
+  }, []);
+
+  const endSession = (clientX, clientY, { openIfNotMoved }) => {
+    const s = sessionRef.current;
+    if (!s) return;
+    sessionRef.current = null;
+    window.removeEventListener("pointermove", s.onMove);
+    window.removeEventListener("pointerup", s.onUp);
+    window.removeEventListener("pointercancel", s.onUp);
+    s.ghost?.remove();
+    s.sourceEl?.classList.remove("is-drag-source");
+    clearDropHighlights();
+    document.body.classList.remove("crm-dragging");
+
+    if (!s.moved) {
+      if (openIfNotMoved) onOpen(item.placa);
       return;
     }
-    onDragEnd?.(item, null);
-    onOpen(item.placa);
+
+    s.sourceEl.style.pointerEvents = "none";
+    s.ghost && (s.ghost.style.pointerEvents = "none");
+    const status = statusFromPoint(clientX, clientY);
+    s.sourceEl.style.pointerEvents = "";
+    if (status && status !== item.status) onMoveToStatus(item.placa, status);
+  };
+
+  const beginDrag = (e) => {
+    const sourceEl = cardRef.current;
+    if (!sourceEl) return;
+    const rect = sourceEl.getBoundingClientRect();
+    const ghost = sourceEl.cloneNode(true);
+    ghost.classList.add("crm-card-ghost");
+    ghost.setAttribute("aria-hidden", "true");
+    ghost.style.width = `${rect.width}px`;
+    ghost.style.transform = `translate3d(${rect.left}px, ${rect.top}px, 0)`;
+    document.body.appendChild(ghost);
+    sourceEl.classList.add("is-drag-source");
+    document.body.classList.add("crm-dragging");
+
+    const session = {
+      moved: true,
+      ghost,
+      sourceEl,
+      offsetX: e.clientX - rect.left,
+      offsetY: e.clientY - rect.top,
+      onMove: null,
+      onUp: null,
+    };
+
+    session.onMove = (ev) => {
+      ev.preventDefault();
+      const x = ev.clientX - session.offsetX;
+      const y = ev.clientY - session.offsetY;
+      session.ghost.style.transform = `translate3d(${x}px, ${y}px, 0)`;
+      session.sourceEl.style.pointerEvents = "none";
+      session.ghost.style.pointerEvents = "none";
+      const status = statusFromPoint(ev.clientX, ev.clientY);
+      session.sourceEl.style.pointerEvents = "";
+      highlightDropStatus(status);
+
+      // Auto-scroll horizontal do kanban
+      const board = session.sourceEl.closest(".crm-kanban");
+      if (board) {
+        const b = board.getBoundingClientRect();
+        if (ev.clientX > b.right - 48) board.scrollLeft += 18;
+        if (ev.clientX < b.left + 48) board.scrollLeft -= 18;
+      }
+    };
+
+    session.onUp = (ev) => endSession(ev.clientX, ev.clientY, { openIfNotMoved: false });
+
+    sessionRef.current = session;
+    window.addEventListener("pointermove", session.onMove, { passive: false });
+    window.addEventListener("pointerup", session.onUp);
+    window.addEventListener("pointercancel", session.onUp);
+    session.onMove(e);
   };
 
   return (
     <article
-      className={`crm-card ${dragging ? "is-dragging" : ""}`}
+      ref={cardRef}
+      className="crm-card"
       onPointerDown={(e) => {
         if (e.button !== 0) return;
-        pointerRef.current = { x: e.clientX, y: e.clientY, moved: false };
-        e.currentTarget.setPointerCapture(e.pointerId);
-      }}
-      onPointerMove={(e) => {
-        const start = pointerRef.current;
-        if (!start) return;
-        const dist = Math.hypot(e.clientX - start.x, e.clientY - start.y);
-        if (!start.moved && dist < 12) return;
-        start.moved = true;
-        e.currentTarget.style.pointerEvents = "none";
-        const status = statusFromPoint(e.clientX, e.clientY);
-        e.currentTarget.style.pointerEvents = "";
-        onDragMove?.(item, status);
-      }}
-      onPointerUp={(e) => {
-        if (!pointerRef.current) return;
-        finishPointer(e, pointerRef.current.moved);
-      }}
-      onPointerCancel={(e) => {
-        if (!pointerRef.current) return;
-        pointerRef.current = null;
-        try {
-          e.currentTarget.releasePointerCapture(e.pointerId);
-        } catch {
-          /* ignore */
-        }
-        onDragEnd?.(item, null);
+        const startX = e.clientX;
+        const startY = e.clientY;
+        let started = false;
+
+        const onMove = (ev) => {
+          if (started) return;
+          if (Math.hypot(ev.clientX - startX, ev.clientY - startY) < 10) return;
+          started = true;
+          ev.preventDefault();
+          window.removeEventListener("pointermove", onMove);
+          window.removeEventListener("pointerup", onUp);
+          window.removeEventListener("pointercancel", onUp);
+          beginDrag(ev);
+        };
+
+        const onUp = () => {
+          window.removeEventListener("pointermove", onMove);
+          window.removeEventListener("pointerup", onUp);
+          window.removeEventListener("pointercancel", onUp);
+          if (!started) onOpen(item.placa);
+        };
+
+        window.addEventListener("pointermove", onMove, { passive: false });
+        window.addEventListener("pointerup", onUp);
+        window.addEventListener("pointercancel", onUp);
       }}
     >
       <div className="crm-card-main">
@@ -192,9 +276,6 @@ export default function CrmPanel({
   const [payFilter, setPayFilter] = useState("all");
   const [calFormOpen, setCalFormOpen] = useState(false);
   const [detailTab, setDetailTab] = useState("resumo");
-  const [dragPlaca, setDragPlaca] = useState(null);
-  const [dragOverStatus, setDragOverStatus] = useState(null);
-  const dragMovedRef = useRef(false);
 
   const labels = data?.meta?.statusLabels || STATUS_LABELS;
   const pipeline = useMemo(() => {
@@ -326,22 +407,6 @@ export default function CrmPanel({
     await runAction({ action: "update", placa, status });
   };
 
-  const onCardDragMove = (item, status) => {
-    dragMovedRef.current = true;
-    setDragPlaca(item.placa);
-    setDragOverStatus(status);
-  };
-
-  const onCardDragEnd = async (item, status) => {
-    setDragPlaca(null);
-    setDragOverStatus(null);
-    const moved = dragMovedRef.current;
-    dragMovedRef.current = false;
-    if (moved && status && status !== item.status) {
-      await moveToStatus(item.placa, status);
-    }
-  };
-
   const openCalForm = (isoDate) => {
     setPayForm((p) => ({
       ...p,
@@ -431,7 +496,7 @@ export default function CrmPanel({
                 <section
                   key={status}
                   data-crm-status={status}
-                  className={`crm-column ${dragOverStatus === status ? "is-drop-target" : ""}`}
+                  className="crm-column"
                 >
                   <header>
                     <h3>{labels[status] || status}</h3>
@@ -444,9 +509,7 @@ export default function CrmPanel({
                         item={item}
                         labels={labels}
                         onOpen={openDetail}
-                        dragging={dragPlaca === item.placa}
-                        onDragMove={onCardDragMove}
-                        onDragEnd={onCardDragEnd}
+                        onMoveToStatus={moveToStatus}
                       />
                     ))}
                     {!items.length && <p className="crm-empty-col">Solte aqui</p>}
