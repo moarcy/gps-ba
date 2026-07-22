@@ -795,6 +795,10 @@ button:disabled {
   display: none !important;
 }
 
+.desktop-nav {
+  display: none;
+}
+
 .desktop-filters {
   display: none;
 }
@@ -957,7 +961,8 @@ th {
   }
 
   .search-bar {
-    display: none;
+    display: block;
+    margin-top: 14px;
   }
 
   .hide-mobile {
@@ -969,9 +974,41 @@ th {
     display: none !important;
   }
 
+  .desktop-nav {
+    display: flex !important;
+    gap: 6px;
+    margin-top: 16px;
+    padding: 4px;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--line);
+  }
+
+  .desktop-nav button {
+    flex: 1;
+    border: 0;
+    background: transparent;
+    color: var(--sand-dim);
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-size: 0.88rem;
+    font-weight: 500;
+    cursor: pointer;
+  }
+
+  .desktop-nav button.is-active {
+    color: var(--sand);
+    background: rgba(122, 162, 240, 0.16);
+  }
+
+  /* Mesmo modelo de abas do mobile — uma seção por vez */
   .tab-panel {
-    display: block !important;
+    display: none;
     margin-bottom: 18px;
+  }
+
+  .tab-panel.is-active {
+    display: block !important;
   }
 
   .vehicle-cards {

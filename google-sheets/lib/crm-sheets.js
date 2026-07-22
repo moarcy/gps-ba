@@ -18,6 +18,7 @@ import {
 } from "./excel-utils.js";
 import { normalizeAssessoria } from "./assessoria-rules.js";
 import { normalizeLocalizador } from "./localizador-rules.js";
+import { normalizePatio } from "./patio-rules.js";
 
 function yn(value) {
   if (value === true || value === 1) return "S";
@@ -41,11 +42,18 @@ function toIsoDate(value) {
     const day = String(d.getDate()).padStart(2, "0");
     return `${y}-${m}-${day}`;
   }
-  if (typeof d === "number") {
-    // Excel serial — ExcelJS usually returns Date already
-    return null;
+  if (typeof d === "number" && Number.isFinite(d)) {
+    // Serial Excel (dias desde 1899-12-30)
+    const epoch = Date.UTC(1899, 11, 30);
+    const utc = new Date(epoch + d * 86400000);
+    const y = utc.getUTCFullYear();
+    const m = String(utc.getUTCMonth() + 1).padStart(2, "0");
+    const day = String(utc.getUTCDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
   }
-  return normalizeText(d).slice(0, 10) || null;
+  const text = normalizeText(d);
+  if (/^\d{4}-\d{2}-\d{2}/.test(text)) return text.slice(0, 10);
+  return null;
 }
 
 function toIsoDateTime(value) {
@@ -185,7 +193,7 @@ export function normalizePipelineRecord(raw) {
     rastreado: ynBool(raw.rastreado),
     temMandado: ynBool(raw.tem_mandado),
     usaGuincho: ynBool(raw.usa_guincho),
-    patio: normalizeText(raw.patio),
+    patio: normalizePatio(raw.patio),
     dataApreensao: toIsoDate(raw.data_apreensao),
     dataEntradaPatio: dataEntrada,
     dataSaidaPatio: dataSaida,

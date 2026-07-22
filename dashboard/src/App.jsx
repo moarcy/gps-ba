@@ -407,6 +407,24 @@ export default function App() {
             aria-label="Buscar"
           />
         </div>
+
+        <nav className="desktop-nav desktop-only" aria-label="Navegação principal">
+          {[
+            ["resumo", "Resumo"],
+            ["crm", "CRM"],
+            ["veiculos", "Veículos"],
+            ["insights", "Insights"],
+          ].map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              className={tab === id ? "is-active" : ""}
+              onClick={() => setTab(id)}
+            >
+              {label}
+            </button>
+          ))}
+        </nav>
       </header>
 
       <main className={`tab-panels tab-${tab}`}>

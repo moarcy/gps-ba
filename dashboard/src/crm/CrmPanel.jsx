@@ -36,7 +36,7 @@ function payTag(ev) {
 }
 
 const KANBAN_STATUSES = STATUS_ORDER.filter(
-  (s) => !["entregue", "cancelado", "apreendido", "aguardando_pagamento", "removido"].includes(s),
+  (s) => !["cancelado", "apreendido", "aguardando_pagamento", "removido"].includes(s),
 );
 
 function buildMonthMatrix(year, month) {
@@ -111,8 +111,10 @@ export default function CrmPanel({
   const [dayOpen, setDayOpen] = useState(null); // ISO date YYYY-MM-DD
   const [detailTab, setDetailTab] = useState("resumo");
   const [statusOverrides, setStatusOverrides] = useState({});
+  const [patioDates, setPatioDates] = useState({ entrada: "", saida: "", patio: "" });
 
   const labels = data?.meta?.statusLabels || STATUS_LABELS;
+  const patioOptions = data?.meta?.patios || ["BF Car", "Ponto a Ponto"];
   const pipeline = useMemo(() => {
     const all = data?.pipeline || [];
     const locNeedle = String(locFilter || "all").trim().toUpperCase();
@@ -161,6 +163,19 @@ export default function CrmPanel({
   // Usa pipeline completo (não o filtrado) para o sheet não “sumir” com filtros
   const selected =
     (data?.pipeline || []).find((p) => p.placa === selectedPlaca) || null;
+
+  useEffect(() => {
+    if (!selected) {
+      setPatioDates({ entrada: "", saida: "", patio: "" });
+      return;
+    }
+    setPatioDates({
+      entrada: selected.dataEntradaPatio || "",
+      saida: selected.dataSaidaPatio || "",
+      patio: selected.patio || "",
+    });
+  }, [selectedPlaca, selected?.dataEntradaPatio, selected?.dataSaidaPatio, selected?.patio]);
+
   const timeline = useMemo(
     () => (data?.timeline || []).filter((t) => !selectedPlaca || t.placa === selectedPlaca),
     [data, selectedPlaca],
@@ -242,12 +257,12 @@ export default function CrmPanel({
     };
   }, [selectedPlaca]);
 
-  const moveToStatus = async (placa, status) => {
+  const moveToStatus = async (placa, status, extra = {}) => {
     const current = (data?.pipeline || []).find((p) => p.placa === placa);
     if (!current || current.status === status) return;
     setStatusOverrides((prev) => ({ ...prev, [placa]: status }));
     try {
-      await runAction({ action: "update", placa, status }, { soft: true });
+      await runAction({ action: "update", placa, status, ...extra }, { soft: true });
     } catch {
       setStatusOverrides((prev) => {
         const next = { ...prev };
@@ -260,6 +275,31 @@ export default function CrmPanel({
       const next = { ...prev };
       delete next[placa];
       return next;
+    });
+  };
+
+  const savePatioDates = async ({ markEntregue = false } = {}) => {
+    if (!selected) return;
+    const entrada = patioDates.entrada || null;
+    const saida = patioDates.saida || null;
+    const patio = patioDates.patio || null;
+    if (markEntregue) {
+      await runAction({
+        action: "update",
+        placa: selected.placa,
+        patio,
+        dataEntradaPatio: entrada,
+        dataSaidaPatio: saida || new Date().toISOString().slice(0, 10),
+        status: "entregue",
+      });
+      return;
+    }
+    await runAction({
+      action: "update",
+      placa: selected.placa,
+      patio,
+      dataEntradaPatio: entrada,
+      dataSaidaPatio: saida,
     });
   };
 
@@ -667,6 +707,9 @@ export default function CrmPanel({
 
       {crmTab === "patio" && (
         <div className="crm-list">
+          <p className="section-hint">
+            Veículos no pátio. Abra o card para informar a data de saída manualmente.
+          </p>
           {patio.length === 0 && (
             <div className="empty-state">Nenhum veículo no pátio.</div>
           )}
@@ -681,6 +724,9 @@ export default function CrmPanel({
                 <strong className="placa">{item.placa}</strong>
                 <span>
                   {item.patio || "Pátio"} · entrada {formatShortDate(item.dataEntradaPatio)}
+                  {item.dataSaidaPatio
+                    ? ` · saída ${formatShortDate(item.dataSaidaPatio)}`
+                    : " · saída pendente"}
                 </span>
               </div>
               <div className="crm-follow-right">
@@ -781,6 +827,83 @@ export default function CrmPanel({
                         <dd>{selected.diarias ?? "—"}</dd>
                       </div>
                     </dl>
+
+                    {(selected.status === "no_patio" ||
+                      selected.dataEntradaPatio ||
+                      selected.status === "entregue") && (
+                      <div className="crm-patio-box">
+                        <p className="crm-patio-box-title">Datas do pátio</p>
+                        <p className="section-hint">
+                          Entrada = data do Controle. BIRA → BF Car · MACIEL → Ponto a Ponto. Saída é
+                          informada manualmente.
+                        </p>
+                        <div className="filter">
+                          <label htmlFor="crm-patio-nome">Pátio</label>
+                          <select
+                            id="crm-patio-nome"
+                            value={patioDates.patio}
+                            onChange={(e) =>
+                              setPatioDates((p) => ({ ...p, patio: e.target.value }))
+                            }
+                          >
+                            <option value="">Selecione…</option>
+                            {patioOptions.map((name) => (
+                              <option key={name} value={name}>
+                                {name}
+                              </option>
+                            ))}
+                            {patioDates.patio &&
+                              !patioOptions.includes(patioDates.patio) && (
+                                <option value={patioDates.patio}>{patioDates.patio}</option>
+                              )}
+                          </select>
+                        </div>
+                        <div className="filter-row">
+                          <div className="filter">
+                            <label htmlFor="crm-patio-entrada">Entrada</label>
+                            <input
+                              id="crm-patio-entrada"
+                              type="date"
+                              value={patioDates.entrada}
+                              onChange={(e) =>
+                                setPatioDates((p) => ({ ...p, entrada: e.target.value }))
+                              }
+                            />
+                          </div>
+                          <div className="filter">
+                            <label htmlFor="crm-patio-saida">Saída</label>
+                            <input
+                              id="crm-patio-saida"
+                              type="date"
+                              value={patioDates.saida}
+                              onChange={(e) =>
+                                setPatioDates((p) => ({ ...p, saida: e.target.value }))
+                              }
+                            />
+                          </div>
+                        </div>
+                        <div className="crm-patio-actions">
+                          <button
+                            type="button"
+                            className="btn btn-ghost"
+                            disabled={saving}
+                            onClick={() => savePatioDates()}
+                          >
+                            Salvar datas
+                          </button>
+                          {selected.status === "no_patio" && (
+                            <button
+                              type="button"
+                              className="btn btn-primary"
+                              disabled={saving}
+                              onClick={() => savePatioDates({ markEntregue: true })}
+                            >
+                              Registrar saída → Entregue
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )}
 
                     <div className="crm-toggle-row">
                       <button
@@ -997,7 +1120,19 @@ export default function CrmPanel({
                     type="button"
                     className="btn btn-primary"
                     disabled={saving}
-                    onClick={() => moveToStatus(selected.placa, st)}
+                    onClick={() =>
+                      moveToStatus(
+                        selected.placa,
+                        st,
+                        st === "entregue"
+                          ? {
+                              dataSaidaPatio:
+                                patioDates.saida || new Date().toISOString().slice(0, 10),
+                              dataEntradaPatio: patioDates.entrada || undefined,
+                            }
+                          : {},
+                      )
+                    }
                   >
                     {NEXT_STATUS_ACTION_LABELS[st] || labels[st] || st}
                   </button>

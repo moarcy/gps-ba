@@ -23,7 +23,13 @@ import {
 } from "./crm-sheets.js";
 import { normalizePlaca, normalizeText } from "./excel-utils.js";
 import { parseWhatsappOcorrencia } from "./parse-whatsapp-ocorrencia.js";
+import {
+  CANONICAL_PATIOS,
+  normalizePatio,
+  resolvePatio,
+} from "./patio-rules.js";
 import { downloadExcel, uploadExcel } from "../excel-drive-client.js";
+import { readGestorRecords } from "../sync-controle-diligencias.js";
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
@@ -60,7 +66,7 @@ async function withGestorWorkbook(mutator) {
   return result;
 }
 
-async function loadCrmSnapshot({ persistIfCreated = true } = {}) {
+async function loadCrmSnapshot({ persistIfCreated = true, enrichFromControle = true } = {}) {
   const gestorId = process.env.SPREADSHEET_ID_1?.trim();
   if (!gestorId) throw Object.assign(new Error("SPREADSHEET_ID_1 não configurado."), { status: 500 });
 
@@ -74,17 +80,99 @@ async function loadCrmSnapshot({ persistIfCreated = true } = {}) {
   const sheets = ensureCrmSheets(workbook);
   const created = !hadPipeline || !hadTimeline || !hadPagamentos;
 
-  if (created && persistIfCreated) {
+  let pipeline = readPipeline(sheets.pipeline);
+  let dirtyRows = [];
+
+  if (enrichFromControle) {
+    const controleSheet = workbook.getWorksheet("Planilha1");
+    const controle = controleSheet ? readGestorRecords(controleSheet) : new Map();
+    const enriched = enrichPipelineFromControle(pipeline, controle);
+    pipeline = enriched.pipeline;
+    dirtyRows = enriched.changed;
+  }
+
+  if ((created || dirtyRows.length) && persistIfCreated) {
+    for (const item of dirtyRows) {
+      upsertPipelineRow(sheets.pipeline, item);
+    }
     workbook.calcProperties.fullCalcOnLoad = true;
     await workbook.xlsx.writeFile(localPath);
     await uploadExcel(gestorId, localPath);
   }
 
   return {
-    pipeline: readPipeline(sheets.pipeline),
+    pipeline,
     timeline: readTimeline(sheets.timeline),
     pagamentos: readPagamentos(sheets.pagamentos),
   };
+}
+
+/**
+ * Data do Controle = entrada no pátio.
+ * BIRA → BF Car · MACIEL → Ponto a Ponto.
+ */
+function enrichPipelineFromControle(pipeline, controleMap) {
+  const changed = [];
+  const next = pipeline.map((item) => {
+    const c = controleMap.get(item.placa);
+    let updated = item;
+    let dirty = false;
+
+    const loc = item.localizador || c?.loc1 || "";
+    const patio = resolvePatio({ patio: item.patio, localizador: loc });
+    if (patio && patio !== item.patio) {
+      updated = { ...updated, patio };
+      dirty = true;
+    }
+
+    // Data da coluna A do Controle = entrada no pátio
+    if (!item.dataEntradaPatio && c?.data) {
+      const entrada = toIsoDate(c.data);
+      if (entrada) {
+        updated = { ...updated, dataEntradaPatio: entrada };
+        if (!updated.dataApreensao) updated = { ...updated, dataApreensao: entrada };
+        dirty = true;
+      }
+    }
+
+    // Localizador do Controle se CRM estiver vazio
+    if (!item.localizador && c?.loc1) {
+      const locNorm = normalizeLocalizador(c.loc1);
+      if (locNorm) {
+        updated = { ...updated, localizador: locNorm };
+        const patioFromLoc = resolvePatio({ patio: updated.patio, localizador: locNorm });
+        if (patioFromLoc && patioFromLoc !== updated.patio) {
+          updated = { ...updated, patio: patioFromLoc };
+        }
+        dirty = true;
+      }
+    }
+
+    // Carros no Controle estão no pátio (exceto já finalizados)
+    if (
+      c &&
+      !["entregue", "cancelado", "removido"].includes(updated.status) &&
+      updated.status !== "no_patio"
+    ) {
+      updated = { ...updated, status: "no_patio", noControle: true };
+      if (!updated.dataEntradaPatio && c.data) {
+        const entrada = toIsoDate(c.data);
+        if (entrada) updated = { ...updated, dataEntradaPatio: entrada };
+      }
+      dirty = true;
+    } else if (c && !item.noControle) {
+      updated = { ...updated, noControle: true };
+      dirty = true;
+    }
+
+    if (dirty) {
+      updated = { ...updated, atualizadoEm: new Date().toISOString() };
+      changed.push(updated);
+    }
+    return updated;
+  });
+
+  return { pipeline: next, changed };
 }
 
 function buildCrmPayload(snapshot) {
@@ -145,15 +233,23 @@ function buildCrmPayload(snapshot) {
     ...new Set(pipeline.map((p) => p.assessoria).filter(Boolean)),
   ].sort((a, b) => a.localeCompare(b, "pt-BR"));
 
+  const patios = [
+    ...new Set([
+      ...CANONICAL_PATIOS,
+      ...pipeline.map((p) => p.patio).filter(Boolean),
+    ]),
+  ];
+
   return {
     meta: {
       generatedAt: new Date().toISOString(),
       statusLabels: CRM_STATUS_LABELS,
       statuses: CRM_STATUSES,
+      patios: CANONICAL_PATIOS,
       pagamentoCategorias: PAGAMENTO_CATEGORIA_LABELS,
       pagamentoFormas: PAGAMENTO_FORMA_LABELS,
     },
-    filters: { localizadores, assessorias },
+    filters: { localizadores, assessorias, patios },
     counts,
     pipeline,
     byStatus,
@@ -208,7 +304,10 @@ function mergeOcorrenciaBody(body = {}) {
     rastreado: Boolean(fields.rastreado),
     temMandado: Boolean(fields.temMandado),
     usaGuincho: Boolean(fields.usaGuincho),
-    patio: normalizeText(fields.patio),
+    patio: resolvePatio({
+      patio: fields.patio,
+      localizador: fields.localizador,
+    }),
     dataApreensao: toIsoDate(fields.dataApreensao),
     dataEntradaPatio: toIsoDate(fields.dataEntradaPatio),
     dataSaidaPatio: toIsoDate(fields.dataSaidaPatio),
@@ -273,11 +372,7 @@ export async function updateOcorrencia(placaInput, patch = {}) {
       "veiculo",
       "cor",
       "origem",
-      "uf",
-      "assessoria",
       "telefone",
-      "localizador",
-      "patio",
       "observacoes",
       "rawWhatsapp",
     ];
@@ -286,6 +381,14 @@ export async function updateOcorrencia(placaInput, patch = {}) {
     }
     if (patch.assessoria !== undefined) next.assessoria = normalizeAssessoria(patch.assessoria);
     if (patch.localizador !== undefined) next.localizador = normalizeLocalizador(patch.localizador);
+    if (patch.patio !== undefined) {
+      next.patio = resolvePatio({
+        patio: patch.patio,
+        localizador: next.localizador || current.localizador,
+      });
+    } else if (patch.localizador !== undefined && !normalizePatio(next.patio)) {
+      next.patio = resolvePatio({ localizador: next.localizador });
+    }
     if (patch.uf !== undefined) next.uf = normalizeText(patch.uf).toUpperCase();
     if (patch.rastreado !== undefined) next.rastreado = Boolean(patch.rastreado);
     if (patch.temMandado !== undefined) {
@@ -329,14 +432,25 @@ export async function updateOcorrencia(placaInput, patch = {}) {
 
       // Apreensão → pátio; cliente busca no pátio → entregue (fim do CRM).
       // Pagamento é trilha paralela e pode ficar pendente.
+      // Data do Controle / apreensão = entrada no pátio. Pátio por LOC: BIRA→BF Car, MACIEL→Ponto a Ponto.
       if (patch.status === "apreendido") {
         next.status = "no_patio";
         if (!next.dataApreensao) next.dataApreensao = todayIso();
-        if (!next.dataEntradaPatio) next.dataEntradaPatio = todayIso();
+        if (!next.dataEntradaPatio) {
+          next.dataEntradaPatio = next.dataApreensao || todayIso();
+        }
+        if (!next.patio) {
+          next.patio = resolvePatio({ localizador: next.localizador });
+        }
       }
       if (patch.status === "no_patio") {
         if (!next.dataApreensao) next.dataApreensao = todayIso();
-        if (!next.dataEntradaPatio) next.dataEntradaPatio = todayIso();
+        if (!next.dataEntradaPatio) {
+          next.dataEntradaPatio = next.dataApreensao || todayIso();
+        }
+        if (!next.patio) {
+          next.patio = resolvePatio({ localizador: next.localizador });
+        }
         if (
           prevStatus === "removido" ||
           prevStatus === "entregue" ||
@@ -499,7 +613,8 @@ export async function sendToControle(body = {}) {
   const result = await addVehicleToGestor(
     {
       placa: occ.placa,
-      data: occ.dataApreensao || occ.dataOcorrencia || todayIso(),
+      // Data do Controle = entrada no pátio (mesma data usada no CRM)
+      data: occ.dataEntradaPatio || occ.dataApreensao || occ.dataOcorrencia || todayIso(),
       loc1: occ.localizador,
       assessoria: occ.assessoria,
       contato: "",
@@ -518,12 +633,22 @@ export async function sendToControle(body = {}) {
     const current = all.find((p) => p.placa === placa);
     if (current) {
       current.noControle = true;
+      if (!current.dataEntradaPatio) {
+        current.dataEntradaPatio =
+          occ.dataEntradaPatio || occ.dataApreensao || occ.dataOcorrencia || todayIso();
+      }
+      if (!current.patio) {
+        current.patio = resolvePatio({ localizador: current.localizador });
+      }
+      if (current.status !== "entregue" && current.status !== "cancelado") {
+        current.status = "no_patio";
+      }
       current.atualizadoEm = new Date().toISOString();
       upsertPipelineRow(sheets.pipeline, current);
       appendTimelineRow(sheets.timeline, {
         placa,
         tipo: "status",
-        mensagem: "Enviado ao Controle Diligências",
+        mensagem: `Enviado ao Controle Diligências · pátio ${current.patio || "—"} · entrada ${current.dataEntradaPatio || "—"}`,
       });
     }
   });
