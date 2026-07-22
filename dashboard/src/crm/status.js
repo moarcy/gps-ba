@@ -30,11 +30,19 @@ export const NEXT_STATUS = {
   com_mandado: ["apreendido", "indisponivel_temp", "cancelado"],
   indisponivel_temp: ["aguardando_mandado", "com_mandado", "inapto", "cancelado"],
   inapto: ["cancelado", "aguardando_mandado"],
-  apreendido: ["no_patio", "aguardando_pagamento", "cancelado"],
-  no_patio: ["aguardando_pagamento", "removido"],
-  aguardando_pagamento: ["removido", "no_patio"],
+  // Apreensão sempre entra no pátio; pagamento roda em paralelo (aba Pagamentos).
+  apreendido: ["no_patio"],
+  no_patio: ["removido"],
+  aguardando_pagamento: ["no_patio", "removido"],
   removido: [],
   cancelado: ["nova"],
+};
+
+/** Rótulos dos botões de transição (quando diferente do label do status). */
+export const NEXT_STATUS_ACTION_LABELS = {
+  apreendido: "Apreender → pátio",
+  removido: "Remover do pátio",
+  no_patio: "Voltar ao pátio",
 };
 
 export function formatShortDate(iso) {

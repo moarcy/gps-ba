@@ -39,6 +39,7 @@ export const CONTROLE_BRIDGE_STATUSES = new Set([
   "apreendido",
   "no_patio",
   "aguardando_pagamento",
+  "removido",
 ]);
 
 export const PIPELINE_HEADERS = [

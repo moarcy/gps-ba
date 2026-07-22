@@ -116,8 +116,19 @@ function buildCrmPayload(snapshot) {
     });
 
   const patio = pipeline
-    .filter((p) => p.status === "no_patio" || (p.dataEntradaPatio && !p.dataSaidaPatio))
+    .filter(
+      (p) =>
+        p.status === "no_patio" ||
+        (p.dataEntradaPatio && !p.dataSaidaPatio && p.status !== "removido"),
+    )
     .sort(sortByPriority);
+
+  const pendingPayments = snapshot.pagamentos.filter((p) => !p.pago);
+  const pendingByPlaca = {};
+  for (const p of pendingPayments) {
+    if (!pendingByPlaca[p.placa]) pendingByPlaca[p.placa] = [];
+    pendingByPlaca[p.placa].push(p);
+  }
 
   const counts = Object.fromEntries(
     CRM_STATUSES.map((s) => [s, byStatus[s]?.length || 0]),
@@ -134,6 +145,8 @@ function buildCrmPayload(snapshot) {
     byStatus,
     followUps,
     patio,
+    pendingPayments,
+    pendingByPlaca,
     timeline: snapshot.timeline,
     pagamentos: snapshot.pagamentos,
   };
@@ -286,16 +299,29 @@ export async function updateOcorrencia(placaInput, patch = {}) {
       next.status = patch.status;
 
       if (patch.status === "com_mandado") next.temMandado = true;
-      if (patch.status === "apreendido" || patch.status === "no_patio") {
+
+      // Apreensão sempre vai para o pátio e fica até ser removido.
+      // Pagamento é trilha paralela (CRM Pagamentos) e pode ficar pendente depois.
+      if (patch.status === "apreendido") {
+        next.status = "no_patio";
         if (!next.dataApreensao) next.dataApreensao = todayIso();
-      }
-      if (patch.status === "no_patio") {
         if (!next.dataEntradaPatio) next.dataEntradaPatio = todayIso();
       }
+      if (patch.status === "no_patio") {
+        if (!next.dataApreensao) next.dataApreensao = todayIso();
+        if (!next.dataEntradaPatio) next.dataEntradaPatio = todayIso();
+        // Reabertura no pátio: limpa saída
+        if (prevStatus === "removido" || prevStatus === "aguardando_pagamento") {
+          next.dataSaidaPatio = null;
+        }
+      }
       if (patch.status === "removido") {
+        if (!next.dataEntradaPatio && next.dataApreensao) {
+          next.dataEntradaPatio = next.dataApreensao;
+        }
         if (!next.dataSaidaPatio) next.dataSaidaPatio = todayIso();
       }
-      if (FOLLOWUP_STATUSES.has(patch.status) && patch.proximoContato === undefined) {
+      if (FOLLOWUP_STATUSES.has(next.status) && patch.proximoContato === undefined) {
         next.proximoContato = plusDaysIso(7);
       }
     }
@@ -304,10 +330,15 @@ export async function updateOcorrencia(placaInput, patch = {}) {
     upsertPipelineRow(sheets.pipeline, next);
 
     if (patch.status && patch.status !== prevStatus) {
+      const requested = patch.status;
+      let mensagem = `Status: ${CRM_STATUS_LABELS[prevStatus] || prevStatus} → ${CRM_STATUS_LABELS[next.status] || next.status}`;
+      if (requested === "apreendido" && next.status === "no_patio") {
+        mensagem = `Apreendido e enviado ao pátio (${CRM_STATUS_LABELS[prevStatus] || prevStatus} → No pátio)`;
+      }
       appendTimelineRow(sheets.timeline, {
         placa,
         tipo: "status",
-        mensagem: `Status: ${CRM_STATUS_LABELS[prevStatus] || prevStatus} → ${CRM_STATUS_LABELS[next.status] || next.status}`,
+        mensagem,
       });
     } else if (Object.keys(patch).length) {
       appendTimelineRow(sheets.timeline, {
@@ -389,16 +420,11 @@ export async function upsertPagamento(body = {}) {
       tipo: "pagamento",
       mensagem: pagamento.pago
         ? `Pagamento ${pagamento.tipo.toUpperCase()} marcado como pago (${pagamento.dataPrevista})`
-        : `Pagamento ${pagamento.tipo.toUpperCase()} previsto para ${pagamento.dataPrevista}`,
+        : `Pagamento ${pagamento.tipo.toUpperCase()} previsto para ${pagamento.dataPrevista} (independente do pátio)`,
     });
 
-    const pipeline = readPipeline(sheets.pipeline);
-    const occ = pipeline.find((p) => p.placa === placa);
-    if (occ && occ.status === "no_patio") {
-      occ.status = "aguardando_pagamento";
-      occ.atualizadoEm = new Date().toISOString();
-      upsertPipelineRow(sheets.pipeline, occ);
-    }
+    // Pagamento não altera o status do funil: o carro pode estar no pátio ou já removido
+    // com recebimento ainda em aberto por prazo.
 
     return { ok: true, id, pagamento: { ...pagamento, id } };
   });

@@ -3,6 +3,7 @@ import { formatBRL } from "../lib/format";
 import NewOcorrenciaSheet from "./NewOcorrenciaSheet";
 import {
   NEXT_STATUS,
+  NEXT_STATUS_ACTION_LABELS,
   STATUS_LABELS,
   STATUS_ORDER,
   formatDateTime,
@@ -139,7 +140,9 @@ export default function CrmPanel({ data, loading, error, saving, onReload, runAc
 
       {crmTab === "filas" && (
         <div className="crm-kanban">
-          {STATUS_ORDER.filter((s) => !["removido", "cancelado"].includes(s)).map((status) => {
+          {STATUS_ORDER.filter(
+            (s) => !["removido", "cancelado", "apreendido", "aguardando_pagamento"].includes(s),
+          ).map((status) => {
             const items = byStatus[status] || [];
             if (!items.length && ["inapto"].includes(status)) return null;
             return (
@@ -308,7 +311,14 @@ export default function CrmPanel({ data, loading, error, saving, onReload, runAc
                 {selected.uf ? ` · ${selected.uf}` : ""}
               </p>
             </div>
-            {selected.rastreado && <span className="tag-rastreado">Rastreado</span>}
+            <div className="crm-detail-tags">
+              {selected.rastreado && <span className="tag-rastreado">Rastreado</span>}
+              {(data?.pendingByPlaca?.[selected.placa] || []).length > 0 && (
+                <span className="tag-pagamento-pendente">
+                  {(data.pendingByPlaca[selected.placa] || []).length} pag. pendente
+                </span>
+              )}
+            </div>
           </div>
 
           <div className="vehicle-grid">
@@ -339,7 +349,10 @@ export default function CrmPanel({ data, loading, error, saving, onReload, runAc
           </div>
 
           <div className="crm-actions">
-            <p className="section-hint">Avançar status</p>
+            <p className="section-hint">
+              Apreensão envia ao pátio. Remoção encerra diárias. Pagamento segue em paralelo e pode
+              ficar em aberto por prazo.
+            </p>
             <div className="crm-status-actions">
               {(NEXT_STATUS[selected.status] || []).map((st) => (
                 <button
@@ -349,7 +362,7 @@ export default function CrmPanel({ data, loading, error, saving, onReload, runAc
                   disabled={saving}
                   onClick={() => runAction({ action: "update", placa: selected.placa, status: st })}
                 >
-                  {labels[st] || st}
+                  {NEXT_STATUS_ACTION_LABELS[st] || labels[st] || st}
                 </button>
               ))}
             </div>
@@ -402,6 +415,9 @@ export default function CrmPanel({ data, loading, error, saving, onReload, runAc
 
           <div className="panel panel-soft">
             <h3>Pagamento previsto</h3>
+            <p className="section-hint">
+              Independente do pátio: o veículo pode ser removido e o recebimento continuar em aberto.
+            </p>
             <div className="filter-row">
               <div className="filter">
                 <label>Data</label>
