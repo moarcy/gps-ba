@@ -62,7 +62,44 @@ function buildMonthMatrix(year, month) {
   return cells;
 }
 
-export default function CrmPanel({ data, loading, error, saving, onReload, runAction }) {
+function matchesCrmSearch(item, query, labels = {}) {
+  const raw = String(query || "").trim();
+  if (!raw) return true;
+  const needle = raw.toUpperCase();
+  const compact = needle.replace(/[^A-Z0-9]/g, "");
+  const hay = [
+    item.placa,
+    item.localizador,
+    item.assessoria,
+    item.telefone,
+    item.veiculo,
+    item.cor,
+    item.origem,
+    item.uf,
+    item.patio,
+    item.status,
+    labels[item.status],
+    item.rastreado ? "RASTREADO" : "",
+    item.temMandado ? "MANDADO" : "",
+    item.observacoes,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toUpperCase();
+  if (hay.includes(needle)) return true;
+  if (compact && hay.replace(/[^A-Z0-9]/g, "").includes(compact)) return true;
+  return false;
+}
+
+export default function CrmPanel({
+  data,
+  loading,
+  error,
+  saving,
+  onReload,
+  runAction,
+  searchQuery = "",
+}) {
   const [crmTab, setCrmTab] = useState("filas");
   const [selectedPlaca, setSelectedPlaca] = useState(null);
   const [newOpen, setNewOpen] = useState(false);
@@ -83,8 +120,33 @@ export default function CrmPanel({ data, loading, error, saving, onReload, runAc
   const [calFormOpen, setCalFormOpen] = useState(false);
 
   const labels = data?.meta?.statusLabels || STATUS_LABELS;
-  const pipeline = data?.pipeline || [];
-  const byStatus = data?.byStatus || {};
+  const pipeline = useMemo(() => {
+    const all = data?.pipeline || [];
+    return all.filter((item) => matchesCrmSearch(item, searchQuery, labels));
+  }, [data, searchQuery, labels]);
+
+  const pipelinePlacas = useMemo(() => new Set(pipeline.map((p) => p.placa)), [pipeline]);
+
+  const byStatus = useMemo(() => {
+    const map = {};
+    for (const s of STATUS_ORDER) map[s] = [];
+    for (const item of pipeline) {
+      const key = STATUS_ORDER.includes(item.status) ? item.status : "nova";
+      map[key].push(item);
+    }
+    return map;
+  }, [pipeline]);
+
+  const followUps = useMemo(() => {
+    const list = data?.followUps || [];
+    return list.filter((item) => pipelinePlacas.has(item.placa));
+  }, [data, pipelinePlacas]);
+
+  const patio = useMemo(() => {
+    const list = data?.patio || [];
+    return list.filter((item) => pipelinePlacas.has(item.placa));
+  }, [data, pipelinePlacas]);
+
   const selected = pipeline.find((p) => p.placa === selectedPlaca) || null;
   const timeline = useMemo(
     () => (data?.timeline || []).filter((t) => !selectedPlaca || t.placa === selectedPlaca),
@@ -101,12 +163,14 @@ export default function CrmPanel({ data, loading, error, saving, onReload, runAc
       if (!p.dataPrevista) continue;
       if (payFilter === "pago" && !p.pago) continue;
       if (payFilter === "aberto" && p.pago) continue;
+      // Com busca ativa, só mostra pagamentos das placas filtradas
+      if (searchQuery.trim() && !pipelinePlacas.has(p.placa)) continue;
       const key = p.dataPrevista.slice(0, 10);
       if (!map.has(key)) map.set(key, []);
       map.get(key).push(p);
     }
     return map;
-  }, [data, payFilter]);
+  }, [data, payFilter, searchQuery, pipelinePlacas]);
 
   const monthCells = buildMonthMatrix(calCursor.year, calCursor.month);
   const monthLabel = new Date(calCursor.year, calCursor.month, 1).toLocaleDateString("pt-BR", {
@@ -191,6 +255,12 @@ export default function CrmPanel({ data, loading, error, saving, onReload, runAc
       </div>
 
       {error && <p className="form-error">{error}</p>}
+      {searchQuery.trim() && (
+        <p className="section-hint">
+          Busca “{searchQuery.trim()}”: {pipeline.length} veículo
+          {pipeline.length === 1 ? "" : "s"} no CRM
+        </p>
+      )}
 
       {crmTab === "filas" && (
         <div className="crm-kanban">
@@ -222,10 +292,10 @@ export default function CrmPanel({ data, loading, error, saving, onReload, runAc
 
       {crmTab === "followups" && (
         <div className="crm-list">
-          {(data?.followUps || []).length === 0 && (
+          {followUps.length === 0 && (
             <div className="empty-state">Nenhum follow-up nos próximos 7 dias.</div>
           )}
-          {(data?.followUps || []).map((item) => (
+          {followUps.map((item) => (
             <button
               key={item.placa}
               type="button"
@@ -327,6 +397,7 @@ export default function CrmPanel({ data, loading, error, saving, onReload, runAc
                     <option key={p.placa} value={p.placa}>
                       {p.placa}
                       {p.assessoria ? ` · ${p.assessoria}` : ""}
+                      {p.localizador ? ` · ${p.localizador}` : ""}
                       {p.rastreado ? " · rastreado" : ""}
                     </option>
                   ))}
@@ -438,10 +509,10 @@ export default function CrmPanel({ data, loading, error, saving, onReload, runAc
 
       {crmTab === "patio" && (
         <div className="crm-list">
-          {(data?.patio || []).length === 0 && (
+          {patio.length === 0 && (
             <div className="empty-state">Nenhum veículo no pátio.</div>
           )}
-          {(data?.patio || []).map((item) => (
+          {patio.map((item) => (
             <button
               key={item.placa}
               type="button"

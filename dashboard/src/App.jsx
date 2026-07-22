@@ -147,9 +147,21 @@ export default function App() {
       if (loc1 !== "all" && v.loc1 !== loc1) return false;
       if (banco !== "all" && v.banco !== banco) return false;
       if (q.trim()) {
-        const needle = q.trim().toUpperCase();
-        const hay = `${v.placa} ${v.banco} ${v.contato} ${v.assessoria}`.toUpperCase();
-        if (!hay.includes(needle)) return false;
+        const needle = q.trim().toUpperCase().replace(/[^A-Z0-9À-Ü\s]/gi, " ");
+        const hay = [
+          v.placa,
+          v.banco,
+          v.contato,
+          v.assessoria,
+          v.loc1,
+          v.nfNr,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toUpperCase();
+        if (!hay.includes(needle) && !hay.replace(/\s/g, "").includes(needle.replace(/\s/g, ""))) {
+          return false;
+        }
       }
       return true;
     });
@@ -370,7 +382,11 @@ export default function App() {
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Buscar placa, assessoria…"
+            placeholder={
+              tab === "crm"
+                ? "Buscar no CRM: placa, loc, assessoria, status…"
+                : "Buscar placa, assessoria, banco, loc…"
+            }
             enterKeyHint="search"
             aria-label="Buscar"
           />
@@ -695,6 +711,7 @@ export default function App() {
             saving={crm.saving}
             onReload={crm.reload}
             runAction={crm.runAction}
+            searchQuery={q}
           />
         </section>
       </main>
