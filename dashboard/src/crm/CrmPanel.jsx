@@ -525,9 +525,11 @@ export default function CrmPanel({
             </button>
           ))}
         </div>
-        <button type="button" className="btn btn-primary" onClick={() => setNewOpen(true)}>
-          + Ocorrência
-        </button>
+        {crmTab === "filas" && (
+          <button type="button" className="btn btn-primary" onClick={() => setNewOpen(true)}>
+            + Ocorrência
+          </button>
+        )}
       </div>
 
       {error && <p className="form-error">{error}</p>}
