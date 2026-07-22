@@ -51,12 +51,14 @@ export default function CrmPanel({ data, loading, error, saving, onReload, runAc
     tipo: "pix",
     valor: "",
     nota: "",
+    placa: "",
   });
   const [calCursor, setCalCursor] = useState(() => {
     const n = new Date();
     return { year: n.getFullYear(), month: n.getMonth() };
   });
   const [payFilter, setPayFilter] = useState("all");
+  const [calFormOpen, setCalFormOpen] = useState(false);
 
   const labels = data?.meta?.statusLabels || STATUS_LABELS;
   const pipeline = data?.pipeline || [];
@@ -93,6 +95,34 @@ export default function CrmPanel({ data, loading, error, saving, onReload, runAc
   const openDetail = (placa) => {
     setSelectedPlaca(placa);
     setCrmTab("detalhe");
+  };
+
+  const openCalForm = (isoDate) => {
+    setPayForm((p) => ({
+      ...p,
+      dataPrevista: isoDate || p.dataPrevista || new Date().toISOString().slice(0, 10),
+      placa: selectedPlaca || p.placa || "",
+      tipo: "pix",
+      valor: "",
+      nota: "",
+    }));
+    setCalFormOpen(true);
+  };
+
+  const submitCalPagamento = async () => {
+    if (!payForm.placa) return;
+    const occ = pipeline.find((p) => p.placa === payForm.placa);
+    await runAction({
+      action: "pagamento",
+      placa: payForm.placa,
+      assessoria: occ?.assessoria || "",
+      dataPrevista: payForm.dataPrevista,
+      tipo: payForm.tipo,
+      valor: payForm.valor,
+      nota: payForm.nota,
+      pago: false,
+    });
+    setCalFormOpen(false);
   };
 
   if (loading && !data) {
@@ -141,7 +171,10 @@ export default function CrmPanel({ data, loading, error, saving, onReload, runAc
       {crmTab === "filas" && (
         <div className="crm-kanban">
           {STATUS_ORDER.filter(
-            (s) => !["entregue", "cancelado", "apreendido", "aguardando_pagamento"].includes(s),
+            (s) =>
+              !["entregue", "cancelado", "apreendido", "aguardando_pagamento", "removido"].includes(
+                s,
+              ),
           ).map((status) => {
             const items = byStatus[status] || [];
             if (!items.length && ["inapto"].includes(status)) return null;
@@ -220,6 +253,20 @@ export default function CrmPanel({ data, loading, error, saving, onReload, runAc
               ›
             </button>
           </div>
+
+          <div className="crm-cal-actions">
+            <p className="section-hint">
+              Toque num dia ou em “+ Recebimento” para agendar PIX / recibo / NF.
+            </p>
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => openCalForm(new Date().toISOString().slice(0, 10))}
+            >
+              + Recebimento
+            </button>
+          </div>
+
           <div className="crm-pay-filters">
             {[
               ["all", "Todos"],
@@ -236,6 +283,79 @@ export default function CrmPanel({ data, loading, error, saving, onReload, runAc
               </button>
             ))}
           </div>
+
+          {calFormOpen && (
+            <div className="panel panel-soft crm-cal-form">
+              <div className="panel-head">
+                <h2>Agendar recebimento</h2>
+                <button type="button" className="link-more" onClick={() => setCalFormOpen(false)}>
+                  Fechar
+                </button>
+              </div>
+              <div className="filter">
+                <label>Placa</label>
+                <select
+                  value={payForm.placa}
+                  onChange={(e) => setPayForm((p) => ({ ...p, placa: e.target.value }))}
+                >
+                  <option value="">Selecione…</option>
+                  {pipeline.map((p) => (
+                    <option key={p.placa} value={p.placa}>
+                      {p.placa}
+                      {p.assessoria ? ` · ${p.assessoria}` : ""}
+                      {p.rastreado ? " · rastreado" : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="filter-row">
+                <div className="filter">
+                  <label>Data prevista</label>
+                  <input
+                    type="date"
+                    value={payForm.dataPrevista}
+                    onChange={(e) => setPayForm((p) => ({ ...p, dataPrevista: e.target.value }))}
+                  />
+                </div>
+                <div className="filter">
+                  <label>Tipo</label>
+                  <select
+                    value={payForm.tipo}
+                    onChange={(e) => setPayForm((p) => ({ ...p, tipo: e.target.value }))}
+                  >
+                    <option value="pix">PIX</option>
+                    <option value="recibo">Recibo</option>
+                    <option value="nf">NF</option>
+                  </select>
+                </div>
+                <div className="filter">
+                  <label>Valor</label>
+                  <input
+                    inputMode="decimal"
+                    value={payForm.valor}
+                    onChange={(e) => setPayForm((p) => ({ ...p, valor: e.target.value }))}
+                  />
+                </div>
+              </div>
+              <div className="filter">
+                <label>Nota</label>
+                <input
+                  value={payForm.nota}
+                  onChange={(e) => setPayForm((p) => ({ ...p, nota: e.target.value }))}
+                  placeholder="Opcional"
+                />
+              </div>
+              <button
+                type="button"
+                className="btn btn-primary btn-block"
+                disabled={saving || !payForm.placa}
+                onClick={submitCalPagamento}
+              >
+                Salvar no calendário
+              </button>
+            </div>
+          )}
+
           <div className="crm-cal-grid">
             {["D", "S", "T", "Q", "Q", "S", "S"].map((d, i) => (
               <div key={`${d}-${i}`} className="crm-cal-dow">
@@ -248,7 +368,14 @@ export default function CrmPanel({ data, loading, error, saving, onReload, runAc
               const events = calendarDays.get(key) || [];
               return (
                 <div key={key} className={`crm-cal-cell ${events.length ? "has-events" : ""}`}>
-                  <span className="crm-cal-day">{day}</span>
+                  <button
+                    type="button"
+                    className="crm-cal-day-btn"
+                    onClick={() => openCalForm(key)}
+                    title="Agendar recebimento neste dia"
+                  >
+                    {day}
+                  </button>
                   {events.map((ev) => {
                     const tracked = pipeline.find((p) => p.placa === ev.placa)?.rastreado;
                     return (
@@ -350,7 +477,7 @@ export default function CrmPanel({ data, loading, error, saving, onReload, runAc
 
           <div className="crm-actions">
             <p className="section-hint">
-              Apreensão → pátio → remoção → entregue (fim). Pagamento segue em paralelo e pode ficar
+              Apreensão → pátio → entregue (cliente busca no pátio). Pagamento é à parte e pode ficar
               em aberto por prazo.
             </p>
             <div className="crm-status-actions">
@@ -454,9 +581,9 @@ export default function CrmPanel({ data, loading, error, saving, onReload, runAc
               onClick={() =>
                 runAction({
                   action: "pagamento",
+                  ...payForm,
                   placa: selected.placa,
                   assessoria: selected.assessoria,
-                  ...payForm,
                   pago: false,
                 })
               }

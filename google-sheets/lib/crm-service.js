@@ -300,8 +300,7 @@ export async function updateOcorrencia(placaInput, patch = {}) {
 
       if (patch.status === "com_mandado") next.temMandado = true;
 
-      // Apreensão sempre vai para o pátio e fica até ser removido.
-      // Depois da remoção, o CRM só fecha em "entregue".
+      // Apreensão → pátio; cliente busca no pátio → entregue (fim do CRM).
       // Pagamento é trilha paralela e pode ficar pendente.
       if (patch.status === "apreendido") {
         next.status = "no_patio";
@@ -311,7 +310,6 @@ export async function updateOcorrencia(placaInput, patch = {}) {
       if (patch.status === "no_patio") {
         if (!next.dataApreensao) next.dataApreensao = todayIso();
         if (!next.dataEntradaPatio) next.dataEntradaPatio = todayIso();
-        // Reabertura no pátio: limpa saída
         if (
           prevStatus === "removido" ||
           prevStatus === "entregue" ||
@@ -320,11 +318,15 @@ export async function updateOcorrencia(placaInput, patch = {}) {
           next.dataSaidaPatio = null;
         }
       }
-      if (patch.status === "removido" || patch.status === "entregue") {
+      // Saída do pátio = entrega (busca no local).
+      if (patch.status === "entregue" || patch.status === "removido") {
         if (!next.dataEntradaPatio && next.dataApreensao) {
           next.dataEntradaPatio = next.dataApreensao;
         }
         if (!next.dataSaidaPatio) next.dataSaidaPatio = todayIso();
+      }
+      if (patch.status === "entregue") {
+        next.status = "entregue";
       }
       if (FOLLOWUP_STATUSES.has(next.status) && patch.proximoContato === undefined) {
         next.proximoContato = plusDaysIso(7);

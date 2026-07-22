@@ -247,6 +247,37 @@
   color: var(--sand-dim);
 }
 
+.crm-cal-day-btn {
+  align-self: flex-start;
+  font-size: 0.75rem;
+  color: var(--sand-dim);
+  padding: 0;
+  min-height: auto;
+  font-weight: 600;
+}
+
+.crm-cal-day-btn:hover {
+  color: #7aa2f0;
+}
+
+.crm-cal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.crm-cal-actions .section-hint {
+  margin: 0;
+  flex: 1;
+  min-width: 180px;
+}
+
+.crm-cal-form {
+  margin-bottom: 4px;
+}
+
 .crm-cal-tag {
   font-size: 0.62rem;
   line-height: 1.2;

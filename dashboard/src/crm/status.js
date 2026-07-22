@@ -32,11 +32,11 @@ export const NEXT_STATUS = {
   com_mandado: ["apreendido", "indisponivel_temp", "cancelado"],
   indisponivel_temp: ["aguardando_mandado", "com_mandado", "inapto", "cancelado"],
   inapto: ["cancelado", "aguardando_mandado"],
-  // Apreensão → pátio → remoção → entregue (fim do CRM).
+  // Apreensão → pátio → entregue (cliente busca no pátio).
   // Pagamento segue em paralelo e pode ficar pendente.
   apreendido: ["no_patio"],
-  no_patio: ["removido"],
-  aguardando_pagamento: ["no_patio", "removido"],
+  no_patio: ["entregue"],
+  aguardando_pagamento: ["no_patio", "entregue"],
   removido: ["entregue"],
   entregue: [],
   cancelado: ["nova"],
@@ -45,8 +45,7 @@ export const NEXT_STATUS = {
 /** Rótulos dos botões de transição (quando diferente do label do status). */
 export const NEXT_STATUS_ACTION_LABELS = {
   apreendido: "Apreender → pátio",
-  removido: "Remover do pátio",
-  entregue: "Marcar entregue",
+  entregue: "Entregue (busca no pátio)",
   no_patio: "Voltar ao pátio",
 };
 
