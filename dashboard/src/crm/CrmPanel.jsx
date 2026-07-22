@@ -65,9 +65,11 @@ function highlightDropStatus(status) {
 function Card({ item, labels, onOpen, onMoveToStatus }) {
   const cardRef = useRef(null);
   const sessionRef = useRef(null);
+  const holdRef = useRef(null);
 
   useEffect(() => {
     return () => {
+      if (holdRef.current?.timer) window.clearTimeout(holdRef.current.timer);
       const s = sessionRef.current;
       if (!s) return;
       window.removeEventListener("pointermove", s.onMove);
@@ -101,7 +103,7 @@ function Card({ item, labels, onOpen, onMoveToStatus }) {
     }
   };
 
-  const beginDrag = (e) => {
+  const beginDrag = (clientX, clientY) => {
     const sourceEl = cardRef.current;
     if (!sourceEl) return;
     const rect = sourceEl.getBoundingClientRect();
@@ -111,14 +113,15 @@ function Card({ item, labels, onOpen, onMoveToStatus }) {
     ghost.style.width = `${rect.width}px`;
     ghost.style.transform = `translate3d(${rect.left}px, ${rect.top}px, 0)`;
     document.body.appendChild(ghost);
+    sourceEl.classList.remove("is-hold-ready");
     sourceEl.classList.add("is-drag-source");
     document.body.classList.add("crm-dragging");
 
     const session = {
       ghost,
       sourceEl,
-      offsetX: e.clientX - rect.left,
-      offsetY: e.clientY - rect.top,
+      offsetX: clientX - rect.left,
+      offsetY: clientY - rect.top,
       overStatus: item.status,
       onMove: null,
       onUp: null,
@@ -147,7 +150,18 @@ function Card({ item, labels, onOpen, onMoveToStatus }) {
     window.addEventListener("pointermove", session.onMove, { passive: false });
     window.addEventListener("pointerup", session.onUp);
     window.addEventListener("pointercancel", session.onUp);
-    session.onMove(e);
+    session.onMove({ clientX, clientY, preventDefault() {} });
+  };
+
+  const clearHold = () => {
+    const h = holdRef.current;
+    if (!h) return;
+    if (h.timer) window.clearTimeout(h.timer);
+    window.removeEventListener("pointermove", h.onMove);
+    window.removeEventListener("pointerup", h.onUp);
+    window.removeEventListener("pointercancel", h.onUp);
+    cardRef.current?.classList.remove("is-hold-ready");
+    holdRef.current = null;
   };
 
   return (
@@ -156,29 +170,40 @@ function Card({ item, labels, onOpen, onMoveToStatus }) {
       className="crm-card"
       onPointerDown={(e) => {
         if (e.button !== 0) return;
+        // Não captura o gesto: scroll horizontal continua livre até o long-press
         const startX = e.clientX;
         const startY = e.clientY;
-        let started = false;
+        let armed = false;
 
         const onMove = (ev) => {
-          if (started) return;
-          if (Math.hypot(ev.clientX - startX, ev.clientY - startY) < 10) return;
-          started = true;
-          ev.preventDefault();
-          window.removeEventListener("pointermove", onMove);
-          window.removeEventListener("pointerup", onUp);
-          window.removeEventListener("pointercancel", onUp);
-          beginDrag(ev);
+          if (Math.hypot(ev.clientX - startX, ev.clientY - startY) > 10) {
+            // Dedo deslizou → cancela hold e deixa a tela rolar
+            clearHold();
+          }
         };
 
         const onUp = () => {
-          window.removeEventListener("pointermove", onMove);
-          window.removeEventListener("pointerup", onUp);
-          window.removeEventListener("pointercancel", onUp);
-          if (!started) onOpen(item.placa);
+          const wasArmed = armed;
+          clearHold();
+          // Toque curto (sem hold) abre o detalhe
+          if (!wasArmed && !sessionRef.current) onOpen(item.placa);
         };
 
-        window.addEventListener("pointermove", onMove, { passive: false });
+        const timer = window.setTimeout(() => {
+          armed = true;
+          cardRef.current?.classList.add("is-hold-ready");
+          // vibração leve se disponível
+          try {
+            navigator.vibrate?.(12);
+          } catch {
+            /* ignore */
+          }
+          clearHold();
+          beginDrag(startX, startY);
+        }, 450);
+
+        holdRef.current = { timer, onMove, onUp };
+        window.addEventListener("pointermove", onMove, { passive: true });
         window.addEventListener("pointerup", onUp);
         window.addEventListener("pointercancel", onUp);
       }}
@@ -280,6 +305,7 @@ export default function CrmPanel({
   });
   const [payFilter, setPayFilter] = useState("all");
   const [calFormOpen, setCalFormOpen] = useState(false);
+  const [dayOpen, setDayOpen] = useState(null); // ISO date YYYY-MM-DD
   const [detailTab, setDetailTab] = useState("resumo");
   const [statusOverrides, setStatusOverrides] = useState({});
 
@@ -514,7 +540,7 @@ export default function CrmPanel({
 
       {crmTab === "filas" && (
         <>
-          <p className="crm-dnd-hint">Toque para abrir · arraste o card para outra coluna.</p>
+          <p className="crm-dnd-hint">Toque para abrir · segure ~0,5s e arraste para mudar a coluna.</p>
           <div className="crm-kanban">
             {KANBAN_STATUSES.map((status) => {
               const items = byStatus[status] || [];
@@ -608,8 +634,7 @@ export default function CrmPanel({
 
           <div className="crm-cal-actions">
             <p className="section-hint">
-              Sincronizado com recebimentos, contatos e mandado (MDD). Toque num dia para agendar
-              recebimento.
+              Toque num dia para ver o que aconteceu. Recebimentos, contatos e MDD aparecem juntos.
             </p>
             <button
               type="button"
@@ -737,37 +762,99 @@ export default function CrmPanel({
               const key = `${calCursor.year}-${String(calCursor.month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
               const events = calendarDays.get(key) || [];
               return (
-                <div key={key} className={`crm-cal-cell ${events.length ? "has-events" : ""}`}>
-                  <button
-                    type="button"
-                    className="crm-cal-day-btn"
-                    onClick={() => openCalForm(key)}
-                    title="Agendar recebimento neste dia"
-                  >
-                    {day}
-                  </button>
-                  {events.map((ev) => {
-                    const tracked = pipeline.find((p) => p.placa === ev.placa)?.rastreado;
-                    const title =
-                      ev.kind === "pagamento"
-                        ? `${ev.placa} · ${ev.calLabel}`
-                        : `${ev.placa} · ${ev.calLabel}${ev.assessoria ? ` · ${ev.assessoria}` : ""}`;
-                    return (
-                      <button
-                        key={ev.id}
-                        type="button"
-                        className={`crm-cal-tag kind-${ev.kind || "pagamento"} ${ev.pago ? "is-paid" : ""} ${tracked ? "is-tracked" : ""}`}
-                        onClick={() => openDetail(ev.placa)}
-                        title={title}
-                      >
-                        {ev.calLabel} {ev.placa}
-                      </button>
-                    );
-                  })}
-                </div>
+                <button
+                  key={key}
+                  type="button"
+                  className={`crm-cal-cell ${events.length ? "has-events" : ""}`}
+                  onClick={() => setDayOpen(key)}
+                >
+                  <span className="crm-cal-day-num">{day}</span>
+                  <span className="crm-cal-dots">
+                    {events.slice(0, 3).map((ev) => (
+                      <span key={ev.id} className={`crm-cal-dot kind-${ev.kind || "pagamento"}`} />
+                    ))}
+                    {events.length > 3 && <span className="crm-cal-more">+{events.length - 3}</span>}
+                  </span>
+                </button>
               );
             })}
           </div>
+
+          {dayOpen &&
+            createPortal(
+              <div
+                className="sheet-root crm-detail-sheet"
+                role="dialog"
+                aria-modal="true"
+                aria-label={`Dia ${dayOpen}`}
+              >
+                <button
+                  type="button"
+                  className="sheet-backdrop"
+                  aria-label="Fechar"
+                  onClick={() => setDayOpen(null)}
+                />
+                <div className="sheet sheet-tall crm-detail-card">
+                  <div className="sheet-handle" />
+                  <div className="sheet-head">
+                    <h2>
+                      {(() => {
+                        const [y, m, d] = dayOpen.split("-").map(Number);
+                        return new Date(y, m - 1, d).toLocaleDateString("pt-BR", {
+                          weekday: "short",
+                          day: "2-digit",
+                          month: "short",
+                        });
+                      })()}
+                    </h2>
+                    <button type="button" className="btn btn-ghost" onClick={() => setDayOpen(null)}>
+                      Fechar
+                    </button>
+                  </div>
+                  <div className="sheet-body crm-sheet-body">
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-block"
+                      onClick={() => {
+                        const iso = dayOpen;
+                        setDayOpen(null);
+                        openCalForm(iso);
+                      }}
+                    >
+                      + Recebimento neste dia
+                    </button>
+                    <div className="crm-day-list">
+                      {(calendarDays.get(dayOpen) || []).map((ev) => (
+                        <button
+                          key={ev.id}
+                          type="button"
+                          className={`crm-day-item kind-${ev.kind || "pagamento"}`}
+                          onClick={() => {
+                            setDayOpen(null);
+                            openDetail(ev.placa);
+                          }}
+                        >
+                          <strong>
+                            {ev.calLabel} · {ev.placa}
+                          </strong>
+                          <span>
+                            {ev.assessoria || ev.localizador || "—"}
+                            {ev.kind === "pagamento" && ev.valor != null
+                              ? ` · ${formatBRL(ev.valor)}`
+                              : ""}
+                            {ev.pago ? " · pago" : ""}
+                          </span>
+                        </button>
+                      ))}
+                      {!(calendarDays.get(dayOpen) || []).length && (
+                        <p className="section-hint">Nada agendado neste dia.</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>,
+              document.body,
+            )}
         </div>
       )}
 

@@ -55,6 +55,8 @@
   padding-bottom: 8px;
   scroll-snap-type: x proximity;
   position: relative;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-x;
 }
 
 body.crm-dragging {
@@ -65,12 +67,39 @@ body.crm-dragging {
 
 body.crm-dragging .crm-kanban {
   scroll-snap-type: none;
+  touch-action: none;
 }
 
 .crm-dnd-hint {
   margin: 0 0 8px;
   font-size: 0.78rem;
   color: var(--sand-dim);
+}
+
+.crm-card {
+  position: relative;
+  border-radius: 14px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  color: inherit;
+  user-select: none;
+  cursor: grab;
+  -webkit-user-drag: none;
+  align-self: start;
+  width: 100%;
+  height: auto;
+  transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
+}
+
+.crm-card.is-hold-ready {
+  transform: scale(1.03);
+  border-color: rgba(122, 162, 240, 0.55);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.28);
+}
+
+.crm-card.is-drag-source {
+  opacity: 0.28;
+  touch-action: none;
 }
 
 .crm-column {
@@ -118,27 +147,8 @@ body.crm-dragging .crm-kanban {
   grid-auto-rows: max-content;
 }
 
-.crm-card {
-  position: relative;
-  border-radius: 14px;
-  background: var(--card);
-  border: 1px solid var(--line);
-  color: inherit;
-  user-select: none;
-  touch-action: none;
-  cursor: grab;
-  -webkit-user-drag: none;
-  align-self: start;
-  width: 100%;
-  height: auto;
-}
-
 .crm-card:active {
   cursor: grabbing;
-}
-
-.crm-card.is-drag-source {
-  opacity: 0.28;
 }
 
 .crm-card-ghost {
@@ -154,6 +164,7 @@ body.crm-dragging .crm-kanban {
   transform-origin: top left;
   will-change: transform;
   cursor: grabbing;
+  touch-action: none;
 }
 
 .crm-card-main {
@@ -301,32 +312,103 @@ body.crm-dragging .crm-kanban {
 }
 
 .crm-cal-cell {
-  min-height: 72px;
+  min-height: 64px;
   border-radius: 10px;
   border: 1px solid var(--line);
   background: var(--card);
-  padding: 6px;
+  padding: 8px 6px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  align-items: flex-start;
+  gap: 6px;
+  color: inherit;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
 }
 
 .crm-cal-cell.is-empty {
   opacity: 0.25;
+  pointer-events: none;
 }
 
-.crm-cal-day {
-  font-size: 0.75rem;
-  color: var(--sand-dim);
+.crm-cal-cell.has-events {
+  border-color: rgba(122, 162, 240, 0.35);
 }
 
-.crm-cal-day-btn {
-  align-self: flex-start;
-  font-size: 0.75rem;
-  color: var(--sand-dim);
-  padding: 0;
-  min-height: auto;
+.crm-cal-day-num {
+  font-size: 0.78rem;
   font-weight: 600;
+  color: var(--sand-dim);
+}
+
+.crm-cal-dots {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 3px;
+}
+
+.crm-cal-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(122, 162, 240, 0.8);
+}
+
+.crm-cal-dot.kind-contato {
+  background: rgba(196, 163, 90, 0.9);
+}
+
+.crm-cal-dot.kind-mandado {
+  background: rgba(196, 139, 139, 0.95);
+}
+
+.crm-cal-dot.kind-pagamento {
+  background: rgba(122, 162, 240, 0.85);
+}
+
+.crm-cal-more {
+  font-size: 0.62rem;
+  color: var(--sand-dim);
+}
+
+.crm-day-list {
+  display: grid;
+  gap: 8px;
+}
+
+.crm-day-item {
+  display: grid;
+  gap: 2px;
+  text-align: left;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.03);
+  color: inherit;
+}
+
+.crm-day-item strong {
+  font-size: 0.9rem;
+}
+
+.crm-day-item span {
+  font-size: 0.78rem;
+  color: var(--sand-dim);
+}
+
+.crm-day-item.kind-mandado {
+  border-color: rgba(196, 139, 139, 0.35);
+}
+
+.crm-day-item.kind-contato {
+  border-color: rgba(196, 163, 90, 0.35);
+}
+
+.crm-cal-day,
+.crm-cal-day-btn {
+  display: none;
 }
 
 .crm-cal-day-btn:hover {
