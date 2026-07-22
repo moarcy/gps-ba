@@ -70,16 +70,19 @@ function Card({ item, labels, onOpen, onMoveToStatus }) {
   useEffect(() => {
     return () => {
       if (holdRef.current?.timer) window.clearTimeout(holdRef.current.timer);
+      holdRef.current = null;
       const s = sessionRef.current;
-      if (!s) return;
-      window.removeEventListener("pointermove", s.onMove);
-      window.removeEventListener("pointerup", s.onUp);
-      window.removeEventListener("pointercancel", s.onUp);
-      s.ghost?.remove();
-      s.sourceEl?.classList.remove("is-drag-source");
+      if (s) {
+        window.removeEventListener("pointermove", s.onMove);
+        window.removeEventListener("pointerup", s.onUp);
+        window.removeEventListener("pointercancel", s.onUp);
+        s.ghost?.remove();
+        s.sourceEl?.classList.remove("is-drag-source", "is-hold-ready");
+        sessionRef.current = null;
+      }
       clearDropHighlights();
       document.body.classList.remove("crm-dragging");
-      sessionRef.current = null;
+      document.body.style.touchAction = "";
     };
   }, []);
 

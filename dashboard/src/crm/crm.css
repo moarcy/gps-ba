@@ -56,13 +56,15 @@
   scroll-snap-type: x proximity;
   position: relative;
   -webkit-overflow-scrolling: touch;
-  touch-action: pan-x;
+  /* pan-x + pan-y: rola a página pra cima/baixo e o board pro lado */
+  touch-action: pan-x pan-y;
 }
 
 body.crm-dragging {
   cursor: grabbing !important;
   user-select: none !important;
   touch-action: none;
+  overflow: hidden;
 }
 
 body.crm-dragging .crm-kanban {
