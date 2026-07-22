@@ -34,14 +34,8 @@ function payTag(ev) {
 }
 function Card({ item, labels, onOpen, dragging, onDragStart, onDragEnd }) {
   return (
-    <article
-      className={`crm-card ${dragging ? "is-dragging" : ""}`}
-      draggable
-      onDragStart={(e) => onDragStart?.(e, item)}
-      onDragEnd={onDragEnd}
-      onClick={() => onOpen(item.placa)}
-    >
-      <div className="crm-card-main">
+    <article className={`crm-card ${dragging ? "is-dragging" : ""}`}>
+      <button type="button" className="crm-card-main" onClick={() => onOpen(item.placa)}>
         <div className="crm-card-top">
           <strong className="placa">{item.placa}</strong>
           {item.rastreado && <span className="tag-rastreado">Rastreado</span>}
@@ -57,10 +51,19 @@ function Card({ item, labels, onOpen, dragging, onDragStart, onDragEnd }) {
           <span>{labels[item.status] || item.status}</span>
           <span>Contato {formatShortDate(item.proximoContato)}</span>
         </div>
-      </div>
-      <span className="crm-card-grip" aria-hidden="true">
+      </button>
+      <button
+        type="button"
+        className="crm-card-grip"
+        draggable
+        aria-label={`Arrastar ${item.placa}`}
+        title="Arrastar para outra coluna"
+        onClick={(e) => e.stopPropagation()}
+        onDragStart={(e) => onDragStart?.(e, item)}
+        onDragEnd={onDragEnd}
+      >
         ⋮⋮
-      </span>
+      </button>
     </article>
   );
 }
@@ -142,6 +145,7 @@ export default function CrmPanel({
   const [dragPlaca, setDragPlaca] = useState(null);
   const [dragOverStatus, setDragOverStatus] = useState(null);
   const suppressOpenRef = useRef(false);
+  const dragMovedRef = useRef(false);
 
   const labels = data?.meta?.statusLabels || STATUS_LABELS;
   const pipeline = useMemo(() => {
@@ -183,7 +187,9 @@ export default function CrmPanel({
     return list.filter((item) => pipelinePlacas.has(item.placa));
   }, [data, pipelinePlacas]);
 
-  const selected = pipeline.find((p) => p.placa === selectedPlaca) || null;
+  // Usa pipeline completo (não o filtrado) para o sheet não “sumir” com filtros
+  const selected =
+    (data?.pipeline || []).find((p) => p.placa === selectedPlaca) || null;
   const timeline = useMemo(
     () => (data?.timeline || []).filter((t) => !selectedPlaca || t.placa === selectedPlaca),
     [data, selectedPlaca],
@@ -241,7 +247,8 @@ export default function CrmPanel({
   };
 
   const onCardDragStart = (e, item) => {
-    suppressOpenRef.current = true;
+    dragMovedRef.current = false;
+    suppressOpenRef.current = false;
     setDragPlaca(item.placa);
     e.dataTransfer.setData("text/placa", item.placa);
     e.dataTransfer.setData("text/plain", item.placa);
@@ -251,14 +258,23 @@ export default function CrmPanel({
   const onCardDragEnd = () => {
     setDragPlaca(null);
     setDragOverStatus(null);
-    window.setTimeout(() => {
+    // Só bloqueia o click se houve arraste real (senão o clique abre o detalhe)
+    if (dragMovedRef.current) {
+      suppressOpenRef.current = true;
+      window.setTimeout(() => {
+        suppressOpenRef.current = false;
+        dragMovedRef.current = false;
+      }, 120);
+    } else {
       suppressOpenRef.current = false;
-    }, 80);
+      dragMovedRef.current = false;
+    }
   };
 
   const onColumnDragOver = (e, status) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
+    dragMovedRef.current = true;
     if (dragOverStatus !== status) setDragOverStatus(status);
   };
 
@@ -351,7 +367,7 @@ export default function CrmPanel({
 
       {crmTab === "filas" && (
         <>
-          <p className="crm-dnd-hint">Arraste o card entre as colunas para mudar o status.</p>
+          <p className="crm-dnd-hint">Toque no card para abrir · arraste pelo ⋮⋮ para mudar a coluna.</p>
           <div className="crm-kanban">
             {KANBAN_STATUSES.map((status) => {
               const items = byStatus[status] || [];
