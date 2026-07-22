@@ -801,7 +801,8 @@ button:disabled {
 
 .tab-panel {
   display: none;
-  animation: rise 0.35s ease both;
+  /* sem fill-mode "both": o transform residual prende position:fixed dos sheets */
+  animation: rise 0.35s ease;
 }
 
 .tab-panel.is-active {

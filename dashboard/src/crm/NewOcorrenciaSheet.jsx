@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 
 const EMPTY = {
   placa: "",
@@ -85,7 +86,7 @@ export default function NewOcorrenciaSheet({ open, onClose, onCreate }) {
     }
   };
 
-  return (
+  return createPortal(
     <div className="sheet-root" role="dialog" aria-modal="true" aria-label="Nova ocorrência">
       <button type="button" className="sheet-backdrop" aria-label="Fechar" onClick={onClose} />
       <div className="sheet sheet-tall">
@@ -250,6 +251,7 @@ export default function NewOcorrenciaSheet({ open, onClose, onCreate }) {
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
