@@ -34,6 +34,10 @@ test-gestor-out.xlsx
 _xlsx_tmp/
 _extract_*
 
+# Imports locais (WhatsApp / Locgram)
+Conversa do WhatsApp*.txt
+google-sheets/imports/
+
 # Documentos / planilhas locais (não versionar)
 *.xlsx
 *.xls

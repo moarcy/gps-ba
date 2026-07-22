@@ -7,7 +7,8 @@
     "example": "node example-usage.js",
     "audit": "node audit-controle.js",
     "sync": "node run-sync.js",
-    "api": "node api-server.js"
+    "api": "node api-server.js",
+    "import:locgram": "node import-locgram-chat.js"
   },
   "dependencies": {
     "dotenv": "^16.4.7",
