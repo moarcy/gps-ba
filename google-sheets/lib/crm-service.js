@@ -6,6 +6,9 @@ import {
   CRM_STATUS_LABELS,
   CRM_STATUSES,
   FOLLOWUP_STATUSES,
+  PAGAMENTO_CATEGORIA_LABELS,
+  PAGAMENTO_CATEGORIAS,
+  PAGAMENTO_FORMA_LABELS,
 } from "./crm-constants.js";
 import {
   appendTimelineRow,
@@ -139,6 +142,8 @@ function buildCrmPayload(snapshot) {
       generatedAt: new Date().toISOString(),
       statusLabels: CRM_STATUS_LABELS,
       statuses: CRM_STATUSES,
+      pagamentoCategorias: PAGAMENTO_CATEGORIA_LABELS,
+      pagamentoFormas: PAGAMENTO_FORMA_LABELS,
     },
     counts,
     pipeline,
@@ -408,11 +413,21 @@ export async function upsertPagamento(body = {}) {
     throw err;
   }
 
+  let categoria = normalizeText(body.categoria).toLowerCase();
+  let tipo = normalizeText(body.tipo).toLowerCase() || "pix";
+  if (PAGAMENTO_CATEGORIAS.includes(tipo) && !categoria) {
+    categoria = tipo;
+    tipo = normalizeText(body.forma).toLowerCase() || "pix";
+  }
+  if (!PAGAMENTO_CATEGORIAS.includes(categoria)) categoria = "apreensao";
+  if (body.forma) tipo = normalizeText(body.forma).toLowerCase() || tipo;
+
   const pagamento = {
     id: normalizeText(body.id) || null,
     placa,
     dataPrevista: toIsoDate(body.dataPrevista) || todayIso(),
-    tipo: normalizeText(body.tipo).toLowerCase() || "pix",
+    categoria,
+    tipo,
     assessoria: normalizeAssessoria(body.assessoria || ""),
     valor: body.valor === "" || body.valor == null ? null : Number(body.valor),
     pago: Boolean(body.pago),
@@ -422,16 +437,15 @@ export async function upsertPagamento(body = {}) {
 
   return withGestorWorkbook(async (_wb, sheets) => {
     const id = upsertPagamentoRow(sheets.pagamentos, pagamento);
+    const catLabel = PAGAMENTO_CATEGORIA_LABELS[pagamento.categoria] || pagamento.categoria;
+    const formaLabel = PAGAMENTO_FORMA_LABELS[pagamento.tipo] || pagamento.tipo.toUpperCase();
     appendTimelineRow(sheets.timeline, {
       placa,
       tipo: "pagamento",
       mensagem: pagamento.pago
-        ? `Pagamento ${pagamento.tipo.toUpperCase()} marcado como pago (${pagamento.dataPrevista})`
-        : `Pagamento ${pagamento.tipo.toUpperCase()} previsto para ${pagamento.dataPrevista} (independente do pátio)`,
+        ? `${catLabel} (${formaLabel}) marcado como pago (${pagamento.dataPrevista})`
+        : `${catLabel} (${formaLabel}) previsto para ${pagamento.dataPrevista}`,
     });
-
-    // Pagamento não altera o status do funil: o carro pode estar no pátio ou já removido
-    // com recebimento ainda em aberto por prazo.
 
     return { ok: true, id, pagamento: { ...pagamento, id } };
   });

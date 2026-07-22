@@ -4,6 +4,7 @@ import {
   CRM_TIMELINE_SHEET,
   DATA_START,
   HEADER_ROW,
+  PAGAMENTO_CATEGORIAS,
   PAGAMENTO_HEADERS,
   PIPELINE_HEADERS,
   TIMELINE_HEADERS,
@@ -60,6 +61,10 @@ function ensureSheet(workbook, name, headers) {
   let ws = workbook.getWorksheet(name);
   if (!ws) ws = workbook.addWorksheet(name);
 
+  if (name === CRM_PAGAMENTOS_SHEET) {
+    migratePagamentosLayout(ws);
+  }
+
   const headerRow = ws.getRow(HEADER_ROW);
   headers.forEach((label, i) => {
     const cell = headerRow.getCell(i + 1);
@@ -89,6 +94,35 @@ function ensureSheet(workbook, name, headers) {
   }
 
   return ws;
+}
+
+/** Insere coluna categoria se a aba ainda estiver no layout antigo (sem categoria). */
+function migratePagamentosLayout(ws) {
+  const h4 = normalizeText(cellValue(ws.getCell(HEADER_ROW, 4))).toLowerCase();
+  const h5 = normalizeText(cellValue(ws.getCell(HEADER_ROW, 5))).toLowerCase();
+  if (h4 === "categoria") return;
+  if (h4 !== "tipo" && h5 !== "assessoria") return;
+
+  // Layout antigo: id, placa, data, tipo, assessoria, valor, pago, data_pago, nota
+  // Novo:         id, placa, data, categoria, tipo, assessoria, valor, pago, data_pago, nota
+  for (let r = ws.rowCount; r >= DATA_START; r--) {
+    const hasData =
+      cellValue(ws.getCell(r, 1)) ||
+      cellValue(ws.getCell(r, 2)) ||
+      cellValue(ws.getCell(r, 4));
+    if (!hasData) continue;
+    for (let col = 9; col >= 4; col--) {
+      ws.getCell(r, col + 1).value = cellValue(ws.getCell(r, col));
+    }
+    const oldTipo = normalizeText(cellValue(ws.getCell(r, 5))).toLowerCase();
+    if (PAGAMENTO_CATEGORIAS.includes(oldTipo)) {
+      ws.getCell(r, 4).value = oldTipo;
+      ws.getCell(r, 5).value = "pix";
+    } else {
+      ws.getCell(r, 4).value = "apreensao";
+      // tipo já está na coluna 5 após o shift
+    }
+  }
 }
 
 export function ensureCrmSheets(workbook) {
@@ -227,11 +261,23 @@ export function readPagamentos(ws) {
     const raw = readRowByHeaders(ws, r, PAGAMENTO_HEADERS);
     const placa = normalizePlaca(raw.placa);
     if (!placa && !raw.id) continue;
+
+    let categoria = normalizeText(raw.categoria).toLowerCase();
+    let tipo = normalizeText(raw.tipo).toLowerCase() || "pix";
+
+    // Retrocompat: se "tipo" antigo for uma categoria, migra na leitura.
+    if (PAGAMENTO_CATEGORIAS.includes(tipo) && !categoria) {
+      categoria = tipo;
+      tipo = "pix";
+    }
+    if (!PAGAMENTO_CATEGORIAS.includes(categoria)) categoria = "apreensao";
+
     items.push({
       id: normalizeText(raw.id) || `p-${r}`,
       placa,
       dataPrevista: toIsoDate(raw.data_prevista),
-      tipo: normalizeText(raw.tipo).toLowerCase() || "pix",
+      categoria,
+      tipo,
       assessoria: normalizeText(raw.assessoria),
       valor: asNumber(raw.valor),
       pago: ynBool(raw.pago),
@@ -308,6 +354,7 @@ export function upsertPagamentoRow(ws, pagamento) {
     id,
     placa: normalizePlaca(pagamento.placa),
     data_prevista: pagamento.dataPrevista || null,
+    categoria: pagamento.categoria || "apreensao",
     tipo: pagamento.tipo || "pix",
     assessoria: pagamento.assessoria || "",
     valor: pagamento.valor ?? null,

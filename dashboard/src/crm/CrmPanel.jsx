@@ -11,6 +11,27 @@ import {
 } from "./status";
 import "./crm.css";
 
+const PAY_CATEGORIAS = [
+  ["apreensao", "Apreensão"],
+  ["guincho", "Guincho"],
+  ["estadia", "Estadia"],
+  ["plus", "Plus"],
+];
+
+const PAY_FORMAS = [
+  ["pix", "PIX"],
+  ["recibo", "Recibo"],
+  ["nf", "NF"],
+];
+
+const CAT_LABEL = Object.fromEntries(PAY_CATEGORIAS);
+const FORMA_LABEL = Object.fromEntries(PAY_FORMAS);
+
+function payTag(ev) {
+  const cat = CAT_LABEL[ev.categoria] || ev.categoria || "Apreensão";
+  const forma = FORMA_LABEL[ev.tipo] || (ev.tipo || "PIX").toUpperCase();
+  return `${cat} · ${forma}`;
+}
 function Card({ item, labels, onOpen }) {
   return (
     <button type="button" className="crm-card" onClick={() => onOpen(item.placa)}>
@@ -48,6 +69,7 @@ export default function CrmPanel({ data, loading, error, saving, onReload, runAc
   const [note, setNote] = useState("");
   const [payForm, setPayForm] = useState({
     dataPrevista: new Date().toISOString().slice(0, 10),
+    categoria: "apreensao",
     tipo: "pix",
     valor: "",
     nota: "",
@@ -102,6 +124,7 @@ export default function CrmPanel({ data, loading, error, saving, onReload, runAc
       ...p,
       dataPrevista: isoDate || p.dataPrevista || new Date().toISOString().slice(0, 10),
       placa: selectedPlaca || p.placa || "",
+      categoria: "apreensao",
       tipo: "pix",
       valor: "",
       nota: "",
@@ -117,6 +140,7 @@ export default function CrmPanel({ data, loading, error, saving, onReload, runAc
       placa: payForm.placa,
       assessoria: occ?.assessoria || "",
       dataPrevista: payForm.dataPrevista,
+      categoria: payForm.categoria,
       tipo: payForm.tipo,
       valor: payForm.valor,
       nota: payForm.nota,
@@ -256,7 +280,7 @@ export default function CrmPanel({ data, loading, error, saving, onReload, runAc
 
           <div className="crm-cal-actions">
             <p className="section-hint">
-              Toque num dia ou em “+ Recebimento” para agendar PIX / recibo / NF.
+              Toque num dia ou em “+ Recebimento” para agendar Apreensão / Guincho / Estadia / Plus.
             </p>
             <button
               type="button"
@@ -318,24 +342,39 @@ export default function CrmPanel({ data, loading, error, saving, onReload, runAc
                   />
                 </div>
                 <div className="filter">
-                  <label>Tipo</label>
+                  <label>Recebimento</label>
+                  <select
+                    value={payForm.categoria}
+                    onChange={(e) => setPayForm((p) => ({ ...p, categoria: e.target.value }))}
+                  >
+                    {PAY_CATEGORIAS.map(([id, label]) => (
+                      <option key={id} value={id}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="filter">
+                  <label>Forma</label>
                   <select
                     value={payForm.tipo}
                     onChange={(e) => setPayForm((p) => ({ ...p, tipo: e.target.value }))}
                   >
-                    <option value="pix">PIX</option>
-                    <option value="recibo">Recibo</option>
-                    <option value="nf">NF</option>
+                    {PAY_FORMAS.map(([id, label]) => (
+                      <option key={id} value={id}>
+                        {label}
+                      </option>
+                    ))}
                   </select>
                 </div>
-                <div className="filter">
-                  <label>Valor</label>
-                  <input
-                    inputMode="decimal"
-                    value={payForm.valor}
-                    onChange={(e) => setPayForm((p) => ({ ...p, valor: e.target.value }))}
-                  />
-                </div>
+              </div>
+              <div className="filter">
+                <label>Valor</label>
+                <input
+                  inputMode="decimal"
+                  value={payForm.valor}
+                  onChange={(e) => setPayForm((p) => ({ ...p, valor: e.target.value }))}
+                />
               </div>
               <div className="filter">
                 <label>Nota</label>
@@ -384,9 +423,9 @@ export default function CrmPanel({ data, loading, error, saving, onReload, runAc
                         type="button"
                         className={`crm-cal-tag ${ev.pago ? "is-paid" : ""} ${tracked ? "is-tracked" : ""}`}
                         onClick={() => openDetail(ev.placa)}
-                        title={`${ev.placa} ${ev.tipo}`}
+                        title={`${ev.placa} ${payTag(ev)}`}
                       >
-                        {ev.tipo.toUpperCase()} {ev.assessoria || ev.placa}
+                        {payTag(ev)} {ev.assessoria || ev.placa}
                       </button>
                     );
                   })}
@@ -543,7 +582,8 @@ export default function CrmPanel({ data, loading, error, saving, onReload, runAc
           <div className="panel panel-soft">
             <h3>Pagamento previsto</h3>
             <p className="section-hint">
-              Independente do pátio: o veículo pode ser removido e o recebimento continuar em aberto.
+              Independente do pátio: Apreensão, Guincho, Estadia ou Plus — com forma PIX / recibo /
+              NF.
             </p>
             <div className="filter-row">
               <div className="filter">
@@ -555,24 +595,39 @@ export default function CrmPanel({ data, loading, error, saving, onReload, runAc
                 />
               </div>
               <div className="filter">
-                <label>Tipo</label>
+                <label>Recebimento</label>
+                <select
+                  value={payForm.categoria}
+                  onChange={(e) => setPayForm((p) => ({ ...p, categoria: e.target.value }))}
+                >
+                  {PAY_CATEGORIAS.map(([id, label]) => (
+                    <option key={id} value={id}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="filter">
+                <label>Forma</label>
                 <select
                   value={payForm.tipo}
                   onChange={(e) => setPayForm((p) => ({ ...p, tipo: e.target.value }))}
                 >
-                  <option value="pix">PIX</option>
-                  <option value="recibo">Recibo</option>
-                  <option value="nf">NF</option>
+                  {PAY_FORMAS.map(([id, label]) => (
+                    <option key={id} value={id}>
+                      {label}
+                    </option>
+                  ))}
                 </select>
               </div>
-              <div className="filter">
-                <label>Valor</label>
-                <input
-                  inputMode="decimal"
-                  value={payForm.valor}
-                  onChange={(e) => setPayForm((p) => ({ ...p, valor: e.target.value }))}
-                />
-              </div>
+            </div>
+            <div className="filter">
+              <label>Valor</label>
+              <input
+                inputMode="decimal"
+                value={payForm.valor}
+                onChange={(e) => setPayForm((p) => ({ ...p, valor: e.target.value }))}
+              />
             </div>
             <button
               type="button"
@@ -595,7 +650,7 @@ export default function CrmPanel({ data, loading, error, saving, onReload, runAc
                 <div key={p.id} className="crm-pay-item">
                   <div>
                     <strong>
-                      {p.tipo.toUpperCase()} · {formatShortDate(p.dataPrevista)}
+                      {payTag(p)} · {formatShortDate(p.dataPrevista)}
                     </strong>
                     <span>{p.valor != null ? formatBRL(p.valor) : "—"}</span>
                   </div>
@@ -609,6 +664,7 @@ export default function CrmPanel({ data, loading, error, saving, onReload, runAc
                         id: p.id,
                         placa: p.placa,
                         dataPrevista: p.dataPrevista,
+                        categoria: p.categoria,
                         tipo: p.tipo,
                         assessoria: p.assessoria,
                         valor: p.valor,

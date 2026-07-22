@@ -77,6 +77,7 @@ export const PAGAMENTO_HEADERS = [
   "id",
   "placa",
   "data_prevista",
+  "categoria",
   "tipo",
   "assessoria",
   "valor",
@@ -84,6 +85,23 @@ export const PAGAMENTO_HEADERS = [
   "data_pago",
   "nota",
 ];
+
+export const PAGAMENTO_CATEGORIAS = ["apreensao", "guincho", "estadia", "plus"];
+
+export const PAGAMENTO_CATEGORIA_LABELS = {
+  apreensao: "Apreensão",
+  guincho: "Guincho",
+  estadia: "Estadia",
+  plus: "Plus",
+};
+
+export const PAGAMENTO_FORMAS = ["pix", "recibo", "nf"];
+
+export const PAGAMENTO_FORMA_LABELS = {
+  pix: "PIX",
+  recibo: "Recibo",
+  nf: "NF",
+};
 
 export const HEADER_ROW = 1;
 export const DATA_START = 2;
