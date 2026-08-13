@@ -129,6 +129,7 @@ export function buildDashboardPayload(records, { source = "gestor" } = {}) {
 
   const byAssessoria = aggregateBy(vehicles, (r) => r.assessoria);
   const byLoc1 = aggregateBy(vehicles, (r) => r.loc1);
+  const byBanco = aggregateBy(vehicles, (r) => r.banco);
 
   const withPremio = vehicles.filter((v) => v.premio != null);
   const withSaldo = vehicles.filter((v) => v.saldo != null);
@@ -180,6 +181,7 @@ export function buildDashboardPayload(records, { source = "gestor" } = {}) {
     byMonth,
     byAssessoria,
     byLoc1,
+    byBanco,
     alerts,
     filters: {
       months: months.map((key) => ({ key, label: formatMonthLabel(key) })),

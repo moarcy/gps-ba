@@ -302,6 +302,15 @@ button:disabled {
   height: 280px;
 }
 
+.insights-grid {
+  display: grid;
+  gap: 4px;
+}
+
+.rank-list-compact {
+  margin-top: 4px;
+}
+
 .chart-tooltip {
   background: #171d24;
   border: 1px solid rgba(197, 204, 212, 0.12);
@@ -1035,6 +1044,12 @@ th {
 
   .chart-box {
     height: 260px;
+  }
+
+  .insights-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    align-items: start;
   }
 
   .icon-btn-filters {

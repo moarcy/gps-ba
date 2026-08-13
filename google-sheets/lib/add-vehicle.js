@@ -3,6 +3,7 @@ import {
   normalizeAssessoria,
   resolveContato,
 } from "./assessoria-rules.js";
+import { normalizeBanco } from "./banco-rules.js";
 import {
   normalizePlaca,
   normalizeText,
@@ -17,6 +18,7 @@ import {
   writeControleSheet,
   writeFechamentosSheet,
 } from "../sync-controle-diligencias.js";
+import { ensureListasSheet } from "./listas-sheet.js";
 import { DATA_CAPACITY } from "./monthly-closing.js";
 
 const GESTOR_DATA_SHEET = "Planilha1";
@@ -41,7 +43,7 @@ function toPlainRecord(row) {
     placa: row.placa,
     data: toExcelDate(row.data),
     loc1: row.loc1 || "",
-    banco: row.banco || "",
+    banco: normalizeBanco(row.banco),
     assessoria: row.assessoria || "",
     contato: row.contato || "",
     premio: row.premio ?? null,
@@ -76,7 +78,7 @@ export function buildVehicleInput(body = {}) {
     placa,
     data: toExcelDate(body.data) || null,
     loc1,
-    banco: normalizeText(body.banco),
+    banco: normalizeBanco(body.banco),
     assessoria,
     contato,
     premio,
@@ -137,6 +139,7 @@ export async function addVehicleToGestor(body, { overwrite = false } = {}) {
   }
 
   const sorted = sortRecords(list);
+  ensureListasSheet(workbook);
   writeControleSheet(worksheet, sorted);
 
   const fechamentos = ensureFechamentosSheet(workbook, GESTOR_DATA_SHEET);

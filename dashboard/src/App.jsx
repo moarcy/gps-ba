@@ -13,7 +13,9 @@ import AddVehicleSheet from "./AddVehicleSheet";
 import CrmPanel from "./crm/CrmPanel";
 import { useCrm } from "./hooks/useCrm";
 import { useDashboard } from "./hooks/useDashboard";
+import { useNfse } from "./hooks/useNfse";
 import { formatBRL, formatDate } from "./lib/format";
+import NfsePanel from "./nfse/NfsePanel";
 import "./index.css";
 
 const CHART_PALETTE = ["#5b8def", "#4aa3a0", "#c4a35a", "#8b7ec8", "#6f9b84", "#b87a7a"];
@@ -25,6 +27,98 @@ function highlightIndex(rows, valueKey = "premio") {
     if ((rows[i][valueKey] || 0) >= (rows[best][valueKey] || 0)) best = i;
   }
   return best;
+}
+
+function topByKey(rows, keyFn, limit = 8) {
+  const map = new Map();
+  for (const v of rows) {
+    const key = keyFn(v) || "(vazio)";
+    if (!map.has(key)) map.set(key, { key, premio: 0, veiculos: 0 });
+    const b = map.get(key);
+    b.veiculos += 1;
+    b.premio += v.premio || 0;
+  }
+  return [...map.values()].sort((a, b) => b.premio - a.premio).slice(0, limit);
+}
+
+function InsightGroup({ title, rows }) {
+  const highlight = highlightIndex(rows);
+  const max = rows[0]?.premio || 1;
+
+  return (
+    <div className="insight-group">
+      <div className="panel panel-soft">
+        <div className="panel-head">
+          <h2>{title}</h2>
+          <span className="chip-soft">Período</span>
+        </div>
+        {rows.length === 0 ? (
+          <p className="section-hint">Nenhum dado no período filtrado.</p>
+        ) : (
+          <div className="chart-box chart-box-tall">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart
+                data={rows}
+                layout="vertical"
+                margin={{ top: 8, right: 12, left: 4, bottom: 0 }}
+              >
+                <CartesianGrid stroke="rgba(255,255,255,0.04)" horizontal={false} />
+                <XAxis
+                  type="number"
+                  stroke="#6b7380"
+                  tick={{ fill: "#8b93a1", fontSize: 11 }}
+                  axisLine={false}
+                  tickLine={false}
+                  tickFormatter={(v) => `${Math.round(v / 1000)}k`}
+                />
+                <YAxis
+                  type="category"
+                  dataKey="key"
+                  width={104}
+                  stroke="#6b7380"
+                  tick={{ fill: "#8b93a1", fontSize: 10 }}
+                  axisLine={false}
+                  tickLine={false}
+                />
+                <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(255,255,255,0.03)" }} />
+                <Bar dataKey="premio" name="Prêmio" radius={[8, 8, 8, 8]} barSize={12}>
+                  {rows.map((_, i) => (
+                    <Cell
+                      key={i}
+                      fill={CHART_PALETTE[i % CHART_PALETTE.length]}
+                      fillOpacity={i === highlight ? 1 : 0.7}
+                    />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </div>
+
+      <div className="rank-list">
+        <div className="panel-head">
+          <h2>Ranking</h2>
+        </div>
+        {rows.map((item, index) => (
+          <div key={item.key} className="rank-row">
+            <span className="rank-pos">{index + 1}</span>
+            <div className="rank-info">
+              <strong>{item.key}</strong>
+              <div className="progress-track">
+                <div
+                  className="progress-fill"
+                  style={{ width: `${Math.max(8, (item.premio / max) * 100)}%` }}
+                />
+              </div>
+              <span>{item.veiculos} veíc.</span>
+            </div>
+            <strong className="rank-value num-premio">{formatBRL(item.premio)}</strong>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function ChartTooltip({ active, payload, label }) {
@@ -119,10 +213,22 @@ function IconCrm() {
   );
 }
 
+function IconNfse() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        fill="currentColor"
+        d="M6 3.5h9.2L18.5 7v13.5H6V3.5Zm8.8 1.2H7.6v14.6h9.3V8.2h-2.1V4.7Zm.4 1.5 1.7 1.8h-1.7V6.2ZM8.8 11.2h6.4v1.4H8.8v-1.4Zm0 3.1h6.4v1.4H8.8v-1.4Zm0 3.1h4.2v1.4H8.8v-1.4Z"
+      />
+    </svg>
+  );
+}
+
 export default function App() {
   const { data, loading, error, reload } = useDashboard();
   const [tab, setTab] = useState("resumo");
   const crm = useCrm({ enabled: tab === "crm" });
+  const nfse = useNfse({ enabled: tab === "nfse" });
   const [month, setMonth] = useState("all");
   const [assessoria, setAssessoria] = useState("all");
   const [loc1, setLoc1] = useState("all");
@@ -205,17 +311,15 @@ export default function App() {
     return data.byMonth.filter((m) => m.key === month);
   }, [data, month]);
 
-  const assessoriaChart = useMemo(() => {
-    const map = new Map();
-    for (const v of filtered) {
-      const key = v.assessoria || "(vazio)";
-      if (!map.has(key)) map.set(key, { key, premio: 0, veiculos: 0 });
-      const b = map.get(key);
-      b.veiculos += 1;
-      b.premio += v.premio || 0;
-    }
-    return [...map.values()].sort((a, b) => b.premio - a.premio).slice(0, 8);
-  }, [filtered]);
+  const assessoriaChart = useMemo(
+    () => topByKey(filtered, (v) => v.assessoria),
+    [filtered],
+  );
+
+  const bancoChart = useMemo(
+    () => topByKey(filtered, (v) => v.banco),
+    [filtered],
+  );
 
   const activeFilterCount =
     [month, assessoria, loc1, banco].filter((v) => v !== "all").length +
@@ -237,8 +341,6 @@ export default function App() {
   };
 
   const monthHighlight = highlightIndex(monthChart);
-  const assessoriaHighlight = highlightIndex(assessoriaChart);
-  const assessoriaMax = assessoriaChart[0]?.premio || 1;
 
   const alertCount = otherAlerts.length;
 
@@ -401,7 +503,9 @@ export default function App() {
             placeholder={
               tab === "crm"
                 ? "Buscar no CRM: placa, loc, assessoria, status…"
-                : "Buscar placa, assessoria, banco, loc…"
+                : tab === "nfse"
+                  ? "Tomadores e emissões na aba NFS-e"
+                  : "Buscar placa, assessoria, banco, loc…"
             }
             enterKeyHint="search"
             aria-label="Buscar"
@@ -412,6 +516,7 @@ export default function App() {
           {[
             ["resumo", "Resumo"],
             ["crm", "CRM"],
+            ["nfse", "NFS-e"],
             ["veiculos", "Veículos"],
             ["insights", "Insights"],
           ].map(([id, label]) => (
@@ -513,6 +618,39 @@ export default function App() {
                 </BarChart>
               </ResponsiveContainer>
             </div>
+          </div>
+
+          <div className="panel panel-soft">
+            <div className="panel-head">
+              <h2>Top bancos</h2>
+              <button type="button" className="link-more" onClick={() => setTab("insights")}>
+                Ver detalhes ›
+              </button>
+            </div>
+            {bancoChart.length === 0 ? (
+              <p className="section-hint">Nenhum banco no período filtrado.</p>
+            ) : (
+              <div className="rank-list rank-list-compact">
+                {bancoChart.slice(0, 5).map((item, index) => (
+                  <div key={item.key} className="rank-row">
+                    <span className="rank-pos">{index + 1}</span>
+                    <div className="rank-info">
+                      <strong>{item.key}</strong>
+                      <div className="progress-track">
+                        <div
+                          className="progress-fill"
+                          style={{
+                            width: `${Math.max(8, (item.premio / (bancoChart[0].premio || 1)) * 100)}%`,
+                          }}
+                        />
+                      </div>
+                      <span>{item.veiculos} veíc.</span>
+                    </div>
+                    <strong className="rank-value num-premio">{formatBRL(item.premio)}</strong>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {semPremioVehicles.length > 0 && (
@@ -668,71 +806,9 @@ export default function App() {
 
         {/* INSIGHTS */}
         <section className={`tab-panel ${tab === "insights" ? "is-active" : ""}`}>
-          <div className="panel panel-soft">
-            <div className="panel-head">
-              <h2>Top assessorias</h2>
-              <span className="chip-soft">Período</span>
-            </div>
-            <div className="chart-box chart-box-tall">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={assessoriaChart}
-                  layout="vertical"
-                  margin={{ top: 8, right: 12, left: 4, bottom: 0 }}
-                >
-                  <CartesianGrid stroke="rgba(255,255,255,0.04)" horizontal={false} />
-                  <XAxis
-                    type="number"
-                    stroke="#6b7380"
-                    tick={{ fill: "#8b93a1", fontSize: 11 }}
-                    axisLine={false}
-                    tickLine={false}
-                    tickFormatter={(v) => `${Math.round(v / 1000)}k`}
-                  />
-                  <YAxis
-                    type="category"
-                    dataKey="key"
-                    width={88}
-                    stroke="#6b7380"
-                    tick={{ fill: "#8b93a1", fontSize: 10 }}
-                    axisLine={false}
-                    tickLine={false}
-                  />
-                  <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(255,255,255,0.03)" }} />
-                  <Bar dataKey="premio" name="Prêmio" radius={[8, 8, 8, 8]} barSize={12}>
-                    {assessoriaChart.map((_, i) => (
-                      <Cell
-                        key={i}
-                        fill={CHART_PALETTE[i % CHART_PALETTE.length]}
-                        fillOpacity={i === assessoriaHighlight ? 1 : 0.7}
-                      />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-
-          <div className="rank-list">
-            <div className="panel-head">
-              <h2>Ranking</h2>
-            </div>
-            {assessoriaChart.map((item, index) => (
-              <div key={item.key} className="rank-row">
-                <span className="rank-pos">{index + 1}</span>
-                <div className="rank-info">
-                  <strong>{item.key}</strong>
-                  <div className="progress-track">
-                    <div
-                      className="progress-fill"
-                      style={{ width: `${Math.max(8, (item.premio / assessoriaMax) * 100)}%` }}
-                    />
-                  </div>
-                  <span>{item.veiculos} veíc.</span>
-                </div>
-                <strong className="rank-value num-premio">{formatBRL(item.premio)}</strong>
-              </div>
-            ))}
+          <div className="insights-grid">
+            <InsightGroup title="Top assessorias" rows={assessoriaChart} />
+            <InsightGroup title="Top bancos" rows={bancoChart} />
           </div>
         </section>
 
@@ -748,6 +824,18 @@ export default function App() {
             searchQuery={q}
             locFilter={loc1}
             assessoriaFilter={assessoria}
+          />
+        </section>
+
+        {/* NFS-e */}
+        <section className={`tab-panel ${tab === "nfse" ? "is-active" : ""}`}>
+          <NfsePanel
+            data={nfse.data}
+            loading={nfse.loading}
+            error={nfse.error}
+            saving={nfse.saving}
+            onReload={nfse.reload}
+            runAction={nfse.runAction}
           />
         </section>
       </main>
@@ -769,6 +857,14 @@ export default function App() {
         >
           <IconCrm />
           <span>CRM</span>
+        </button>
+        <button
+          type="button"
+          className={tab === "nfse" ? "is-active" : ""}
+          onClick={() => setTab("nfse")}
+        >
+          <IconNfse />
+          <span>NFS-e</span>
         </button>
         <button
           type="button"

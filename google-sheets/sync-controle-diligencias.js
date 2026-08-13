@@ -8,6 +8,7 @@ import {
   normalizeText,
   pickFirst,
   resolveDespesa,
+  applyVehicleCalcFormulas,
   setFormula,
   sortRecords,
   toExcelDate,
@@ -16,8 +17,9 @@ import {
   normalizeAssessoria,
   resolveContato,
 } from "./lib/assessoria-rules.js";
+import { normalizeBanco } from "./lib/banco-rules.js";
 import {
-  applyControleAutoFilter,
+  applyControleDataTable,
   applySaldoConditionalFormatting,
   buildControleSheetLayout,
   buildFechamentosSheetLayout,
@@ -27,6 +29,10 @@ import {
   styleControleDataRow,
   trimRowsAfter,
 } from "./lib/controle-sheet-theme.js";
+import {
+  applyControleListValidations,
+  ensureListasSheet,
+} from "./lib/listas-sheet.js";
 import {
   DATA_CAPACITY,
   FECHAMENTOS_SHEET_NAME,
@@ -175,7 +181,7 @@ function resolveBanco({ baseline, gestor, rec, sai, apr, loc1 }) {
   ];
 
   for (const candidate of candidates) {
-    const banco = normalizeText(candidate);
+    const banco = normalizeBanco(candidate);
     if (!banco) continue;
     if (loc && banco.toUpperCase() === loc) continue;
     return banco;
@@ -234,6 +240,7 @@ export function mergeControleRecords(gestorRecords, producaoRecords) {
         loc1,
         sai?.custoGuincho,
         baseline?.guincho,
+        gestor?.guincho,
       ),
       fromGestor: Boolean(gestor),
       fromProducao: Boolean(prod),
@@ -252,19 +259,17 @@ export function writeControleSheet(worksheet, records) {
     );
   }
 
+  if (worksheet.workbook) {
+    ensureListasSheet(worksheet.workbook, {
+      assessoria: records.map((r) => normalizeAssessoria(r.assessoria)),
+      banco: records.map((r) => normalizeBanco(r.banco)),
+      localizador: records.map((r) => r.loc1),
+    });
+  }
+
   buildControleSheetLayout(worksheet);
 
   const dataEnd = DATA_START + DATA_CAPACITY - 1;
-
-  const writeVehicleFormulas = (row, rowNumber) => {
-    // Imposto só com prêmio. Apoio/Loc/Guincho são sempre despesas (com ou sem prêmio).
-    // Saldo = N(Prêmio) − despesas − N(Imposto); fica negativo se só houver despesas.
-    setFormula(row.getCell(12), `IF(G${rowNumber}="","",G${rowNumber}*13%)`);
-    setFormula(
-      row.getCell(13),
-      `IF(COUNTA(G${rowNumber},I${rowNumber},J${rowNumber},K${rowNumber})=0,"",N(G${rowNumber})-N(I${rowNumber})-N(J${rowNumber})-N(K${rowNumber})-N(L${rowNumber}))`,
-    );
-  };
 
   for (let i = 0; i < DATA_CAPACITY; i++) {
     const rowNumber = DATA_START + i;
@@ -274,8 +279,8 @@ export function writeControleSheet(worksheet, records) {
     if (record) {
       row.getCell(1).value = toExcelDate(record.data);
       row.getCell(2).value = record.loc1 || "";
-      row.getCell(3).value = record.banco || "";
-      row.getCell(4).value = record.assessoria || "";
+      row.getCell(3).value = normalizeBanco(record.banco) || "";
+      row.getCell(4).value = normalizeAssessoria(record.assessoria) || "";
       row.getCell(5).value = record.contato || "";
       row.getCell(6).value = record.placa;
       row.getCell(7).value = record.premio ?? null;
@@ -289,14 +294,17 @@ export function writeControleSheet(worksheet, records) {
       }
     }
 
-    writeVehicleFormulas(row, rowNumber);
+    // Imposto só com prêmio. Apoio/Loc/Guincho são sempre despesas (com ou sem prêmio).
+    // Saldo = N(Prêmio) − despesas − N(Imposto); fica negativo se só houver despesas.
+    applyVehicleCalcFormulas(row, rowNumber);
     styleControleDataRow(row, rowNumber, { zebra: i % 2 === 1 });
     row.commit();
   }
 
   trimRowsAfter(worksheet, dataEnd);
   applySaldoConditionalFormatting(worksheet, dataEnd);
-  applyControleAutoFilter(worksheet, dataEnd);
+  applyControleDataTable(worksheet, dataEnd);
+  applyControleListValidations(worksheet, dataEnd);
 }
 
 /**

@@ -12,6 +12,7 @@ import {
   writeControleSheet,
   writeFechamentosSheet,
 } from "./sync-controle-diligencias.js";
+import { ensureListasSheet } from "./lib/listas-sheet.js";
 import { downloadExcel, uploadExcel } from "./excel-drive-client.js";
 
 dotenv.config();
@@ -58,6 +59,7 @@ async function main() {
   }
   console.log(`Placas sincronizadas: ${summary.sincronizadas}\n`);
 
+  ensureListasSheet(producaoFile.workbook);
   const controleProducaoSheet = ensureControleSheet(producaoFile.workbook);
   writeControleSheet(controleProducaoSheet, mergedRecords);
   const fechamentosProducao = ensureFechamentosSheet(
@@ -66,6 +68,7 @@ async function main() {
   );
   writeFechamentosSheet(fechamentosProducao, mergedRecords, CONTROLE_SHEET_NAME);
 
+  ensureListasSheet(gestorFile.workbook);
   writeControleSheet(gestorSheet, mergedRecords);
   const fechamentosGestor = ensureFechamentosSheet(
     gestorFile.workbook,
