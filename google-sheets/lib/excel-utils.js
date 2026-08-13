@@ -37,6 +37,18 @@ export function setFormula(cell, expression) {
   cell.value = { formula: expression };
 }
 
+/**
+ * Imposto (L) e Saldo (M) — mesma regra em toda linha de dados abaixo do cabeçalho.
+ * Imposto só com prêmio; Saldo = Prêmio − Apoio − Loc II − Guincho − Imposto.
+ */
+export function applyVehicleCalcFormulas(row, rowNumber) {
+  setFormula(row.getCell(12), `IF(G${rowNumber}="","",G${rowNumber}*13%)`);
+  setFormula(
+    row.getCell(13),
+    `IF(COUNTA(G${rowNumber},I${rowNumber},J${rowNumber},K${rowNumber})=0,"",N(G${rowNumber})-N(I${rowNumber})-N(J${rowNumber})-N(K${rowNumber})-N(L${rowNumber}))`,
+  );
+}
+
 export function clearCell(cell) {
   cell.value = null;
 }

@@ -40,7 +40,7 @@ const COLUMN_WIDTHS = {
   13: 16,
 };
 
-const HEADERS = [
+export const HEADERS = [
   "Data",
   "Loc 1",
   "Banco",
@@ -55,6 +55,9 @@ const HEADERS = [
   "Imposto",
   "Saldo",
 ];
+
+/** Tabela Excel: ao inserir linha na área de dados, Imposto/Saldo são copiados. */
+export const CONTROLE_TABLE_NAME = "ControleVeiculos";
 
 function thinBorder(color = COLORS.border) {
   const side = { style: "thin", color: { argb: color } };
@@ -90,8 +93,18 @@ function paintCell(cell, { bg, text, size = 11, bold = false }) {
   cell.border = thinBorder("FF9CA3AF");
 }
 
+export function clearControleTables(worksheet) {
+  for (const entry of worksheet.getTables() || []) {
+    const table = Array.isArray(entry) ? entry[0] : entry;
+    const name = table?.name;
+    if (name) worksheet.removeTable(name);
+  }
+}
+
 export function buildControleSheetLayout(worksheet) {
+  clearControleTables(worksheet);
   clearSheetMerges(worksheet);
+  worksheet.autoFilter = undefined;
 
   const removeCount = Math.max(worksheet.rowCount, 400) - DATA_START + 1;
   if (removeCount > 0) {
@@ -232,7 +245,9 @@ export function styleControleClosingRow(row, rowNumber) {
 }
 
 export function buildFechamentosSheetLayout(worksheet, dataSheetName) {
+  clearControleTables(worksheet);
   clearSheetMerges(worksheet);
+  worksheet.autoFilter = undefined;
 
   const removeCount = Math.max(worksheet.rowCount, 50) - DATA_START + 1;
   if (removeCount > 0) {
@@ -330,4 +345,55 @@ export function applyControleAutoFilter(worksheet, lastDataRow) {
       to: { row: lastDataRow, column: DATA_COLUMNS },
     };
   }
+}
+
+/**
+ * Tabela Excel sobre cabeçalho + slots de dados.
+ * Linhas novas inseridas dentro da tabela herdam fórmulas de Imposto/Saldo.
+ */
+export function applyControleDataTable(worksheet, lastDataRow) {
+  if (lastDataRow < DATA_START) return;
+
+  clearControleTables(worksheet);
+  worksheet.autoFilter = undefined;
+
+  const rows = [];
+  for (let r = DATA_START; r <= lastDataRow; r++) {
+    const values = [];
+    for (let c = 1; c <= DATA_COLUMNS; c++) {
+      values.push(worksheet.getCell(r, c).value);
+    }
+    rows.push(values);
+  }
+
+  worksheet.addTable({
+    name: CONTROLE_TABLE_NAME,
+    displayName: CONTROLE_TABLE_NAME,
+    ref: `A${HEADER_ROW}:${colLetter(DATA_COLUMNS)}${lastDataRow}`,
+    headerRow: true,
+    totalsRow: false,
+    style: {
+      theme: "TableStyleMedium2",
+      showRowStripes: false,
+    },
+    columns: HEADERS.map((name) => ({
+      name,
+      filterButton: true,
+    })),
+    rows,
+  });
+
+  // Reforça setas de filtro (Assessoria etc.) em clientes que ignoram filterButton da tabela.
+  applyControleAutoFilter(worksheet, lastDataRow);
+}
+
+function colLetter(col) {
+  let n = col;
+  let s = "";
+  while (n > 0) {
+    const r = (n - 1) % 26;
+    s = String.fromCharCode(65 + r) + s;
+    n = Math.floor((n - 1) / 26);
+  }
+  return s;
 }
