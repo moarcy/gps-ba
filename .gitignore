@@ -11,12 +11,17 @@ dist/
 .env
 .env.*
 !.env.example
+telegram-radar/data/
+telegram-radar/*.session
 google-sheets/credentials.json
 google-sheets/service-account.json
 google-sheets/token.json
 google-sheets/.cache/
+google-sheets/nfse-worker/screenshots/
 **/credentials.json
 **/*.pem
+**/*.pfx
+**/*.p12
 
 # OS / editor
 .DS_Store

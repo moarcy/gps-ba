@@ -1,0 +1,16 @@
+{
+  "name": "telegram-radar",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "login": "node src/login.js",
+    "chats": "node src/chats.js",
+    "test": "node --test src/radar.test.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "grammy": "^1.35.0",
+    "teleproto": "^1.229.0"
+  }
+}
