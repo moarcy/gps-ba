@@ -6,11 +6,8 @@ import {
   LOCALIZADOS_OPS_SHEET,
   LOTES_SHEET,
   applyPosicaoOnWorksheet,
-  dica,
   normalizePosicao,
   readLocalizadosOps,
-  TIPO,
-  whatsappBody,
 } from "./localizador-lotes.js";
 
 const LOC_META = {
@@ -22,6 +19,7 @@ const LOC_META = {
 
 const LOC_ORDER = ["BIRA", "CARLOS", "MACIEL", "OUTROS"];
 const STATUS_SHEET = "Localizados Status";
+const GAP_MS = GAP_MINUTES * 60 * 1000;
 
 const cache = {
   payload: null,
@@ -42,6 +40,10 @@ export function invalidateLocalizadosCache() {
   cache.loadedAt = 0;
 }
 
+function pad(n) {
+  return String(n).padStart(2, "0");
+}
+
 function countPos(items) {
   const counts = { pendente: 0, sim: 0, nao: 0, total: items.length };
   for (const it of items) {
@@ -52,106 +54,151 @@ function countPos(items) {
   return counts;
 }
 
-function parseLoteNum(loteId) {
-  const m = String(loteId || "").match(/(\d+)\s*$/);
-  if (m) return Number(m[1]);
-  return 0;
+function dayKeyOf(it) {
+  if (it.ts) {
+    const d = new Date(it.ts);
+    if (!Number.isNaN(d.getTime())) {
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    }
+  }
+  const label = normalizeText(it.data);
+  if (label) return `d-${label}`;
+  return "sem-data";
 }
 
-function inferTipo(items) {
-  const times = items.map((x) => x.ts).filter(Boolean);
-  if (!times.length) return TIPO.SEM_HORA;
-  const span = Math.max(...times) - Math.min(...times);
-  if (items.length >= 2 && span <= GAP_MINUTES * 60 * 1000) return TIPO.JUNTO;
-  return TIPO.SOLO;
+function dayLabelOf(key, fallback) {
+  if (key === "sem-data") return "sem data";
+  if (key.startsWith("d-")) return key.slice(2);
+  const parts = key.split("-");
+  if (parts.length === 3) return `${parts[2]}/${parts[1]}`;
+  return fallback || key;
+}
+
+function compareDays(a, b) {
+  if (a === b) return 0;
+  if (a === "sem-data") return 1;
+  if (b === "sem-data") return -1;
+  return a < b ? 1 : -1;
+}
+
+function temJuntos(items) {
+  const times = items.map((x) => x.ts).filter(Boolean).sort((a, b) => a - b);
+  for (let i = 1; i < times.length; i++) {
+    if (times[i] - times[i - 1] <= GAP_MS) return true;
+  }
+  return false;
+}
+
+function lineCar(it) {
+  const bits = [it.placa];
+  if (it.veiculo) bits.push(it.veiculo);
+  if (it.hora) bits.push(`— ${it.hora}`);
+  return bits.join(" ");
+}
+
+function whatsappDia({ nome, cidade, diaLabel, items, juntos }) {
+  const n = items.length;
+  const lines = [];
+  lines.push(`${nome}, ${diaLabel} (${cidade}) — ${n} carro${n === 1 ? "" : "s"}.`);
+  lines.push("");
+  if (diaLabel === "sem data") {
+    lines.push("Estão na lista, mas o Locgram não tem horário. Confirma se ainda tem a posição.");
+  } else {
+    lines.push(`Última posição ${diaLabel}. Ordem da ronda, do primeiro horário ao último.`);
+    if (juntos) {
+      lines.push("Alguns bateram quase juntos no horário — devem estar na mesma área.");
+    }
+  }
+  lines.push("");
+  items.forEach((it, i) => {
+    lines.push(`${i + 1}. ${lineCar(it)}`);
+  });
+  lines.push("");
+  lines.push("Desses, quais você AINDA tem a posição?");
+  lines.push("Quando terminar esse dia, te mando o próximo.");
+  return lines.join("\n");
+}
+
+function serializeItem(it, diaId) {
+  return {
+    placa: it.placa,
+    veiculo: it.veiculo,
+    local: it.local,
+    loc: it.loc,
+    loteId: it.loteId || "",
+    diaId,
+    data: it.data,
+    hora: it.hora,
+    ts: it.ts,
+    posicao: it.posicao,
+    obs: it.obs,
+  };
 }
 
 function buildPayload(items) {
-  const byLote = new Map();
-  for (const it of items) {
-    const loc = LOC_META[it.loc] ? it.loc : "OUTROS";
-    const loteId = it.loteId || `${loc}-00`;
-    if (!byLote.has(loteId)) byLote.set(loteId, []);
-    byLote.get(loteId).push({ ...it, loc });
+  const buckets = new Map();
+  for (const raw of items) {
+    const loc = LOC_META[raw.loc] ? raw.loc : "OUTROS";
+    const it = { ...raw, loc };
+    const key = `${loc}|${dayKeyOf(it)}`;
+    if (!buckets.has(key)) buckets.set(key, []);
+    buckets.get(key).push(it);
   }
 
-  const locLoteCount = {};
-  for (const [loteId, group] of byLote) {
-    const loc = group[0]?.loc || "OUTROS";
-    locLoteCount[loc] = (locLoteCount[loc] || 0) + 1;
-  }
-
-  const lotes = [];
-  for (const [loteId, group] of byLote) {
-    const loc = group[0]?.loc || "OUTROS";
+  const dias = [];
+  for (const [key, group] of buckets) {
+    const [loc, diaKey] = key.split("|");
+    group.sort((a, b) => (a.ts || 0) - (b.ts || 0) || a.placa.localeCompare(b.placa));
+    const diaLabel = dayLabelOf(diaKey, group[0]?.data);
     const cidade = group[0]?.local || LOC_META[loc]?.cidade || "";
-    const num = parseLoteNum(loteId);
-    const tipo = inferTipo(group);
-    const times = group.map((x) => x.ts).filter(Boolean);
-    const minTs = times.length ? Math.min(...times) : 0;
-    const maxTs = times.length ? Math.max(...times) : 0;
-    const diaLabel = group.find((x) => x.data)?.data || "";
-    const lote = {
-      id: loteId,
-      loc,
-      num,
-      total: locLoteCount[loc] || 1,
-      tipo,
-      items: group,
-      minTs,
-      maxTs,
-      diaLabel,
-      cidade,
-    };
-    lote.dica = dica(lote);
-    lote.whatsapp = whatsappBody(lote, loc, cidade);
+    const juntos = temJuntos(group);
+    const diaId = `${loc}-${diaKey}`;
     const counts = countPos(group);
-    lotes.push({
-      id: lote.id,
+    const dica = diaLabel === "sem data"
+      ? "Sem horário no Locgram. Confirma se lembra da área."
+      : juntos
+        ? `Última posição ${diaLabel}. Ordem da ronda. Alguns bateram quase juntos — devem estar perto.`
+        : `Última posição ${diaLabel}. Ordem da ronda, do primeiro horário ao último.`;
+    dias.push({
+      id: diaId,
       loc,
-      num,
-      total: lote.total,
-      tipo: lote.tipo,
-      dica: lote.dica,
+      diaKey,
       diaLabel,
       cidade,
-      whatsapp: lote.whatsapp,
+      dica,
+      juntos,
+      whatsapp: whatsappDia({
+        nome: LOC_META[loc].nome,
+        cidade,
+        diaLabel,
+        items: group,
+        juntos,
+      }),
       pendente: counts.pendente,
       sim: counts.sim,
       nao: counts.nao,
       carros: counts.total,
-      items: group.map((it) => ({
-        placa: it.placa,
-        veiculo: it.veiculo,
-        local: it.local,
-        loc: it.loc,
-        loteId: lote.id,
-        data: it.data,
-        hora: it.hora,
-        ts: it.ts,
-        posicao: it.posicao,
-        obs: it.obs,
-      })),
+      items: group.map((it) => serializeItem(it, diaId)),
     });
   }
 
-  lotes.sort((a, b) => {
+  dias.sort((a, b) => {
     const ia = LOC_ORDER.indexOf(a.loc);
     const ib = LOC_ORDER.indexOf(b.loc);
     if (ia !== ib) return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
-    return a.num - b.num;
+    return compareDays(a.diaKey, b.diaKey);
   });
 
   const locators = LOC_ORDER.map((id) => {
-    const group = lotes.filter((l) => l.loc === id);
-    const items = group.flatMap((l) => l.items);
-    const counts = countPos(items);
-    const primeiroPendente = group.find((l) => l.pendente > 0);
+    const group = dias.filter((d) => d.loc === id);
+    const locItems = group.flatMap((d) => d.items);
+    const counts = countPos(locItems);
+    const primeiroPendente = group.find((d) => d.pendente > 0);
     return {
       id,
       nome: LOC_META[id].nome,
       cidade: LOC_META[id].cidade,
-      lotes: group.length,
+      dias: group.length,
       primeiroPendente: primeiroPendente?.id || group[0]?.id || null,
       ...counts,
     };
@@ -159,7 +206,8 @@ function buildPayload(items) {
 
   return {
     locators,
-    lotes,
+    dias,
+    lotes: dias,
     counts: countPos(items),
     sheet: LOCALIZADOS_OPS_SHEET,
   };
@@ -223,6 +271,6 @@ export async function updatePosicao({ placa, posicao, obs } = {}) {
   cache.payload = payload;
   cache.loadedAt = Date.now();
 
-  const item = payload.lotes.flatMap((l) => l.items).find((it) => it.placa === plate);
+  const item = payload.dias.flatMap((d) => d.items).find((it) => it.placa === plate);
   return { ok: true, placa: plate, posicao: next, obs: item?.obs || obsText || "", item, data: payload };
 }

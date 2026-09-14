@@ -17,9 +17,9 @@ export default function LocalizadosPanel({
   searchQuery = "",
 }) {
   const locators = data?.locators || [];
-  const lotes = data?.lotes || [];
+  const dias = data?.dias || data?.lotes || [];
   const [loc, setLoc] = useState("");
-  const [loteId, setLoteId] = useState("");
+  const [diaId, setDiaId] = useState("");
   const [copied, setCopied] = useState(false);
 
   const needle = searchQuery.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
@@ -32,48 +32,48 @@ export default function LocalizadosPanel({
     }
   }, [locators, loc]);
 
-  const locLotes = useMemo(
-    () => lotes.filter((l) => l.loc === loc),
-    [lotes, loc],
+  const locDias = useMemo(
+    () => dias.filter((d) => d.loc === loc),
+    [dias, loc],
   );
 
   const hit = useMemo(() => {
     if (!needle) return null;
-    return lotes.find((l) => l.items.some((it) => it.placa.includes(needle))) || null;
-  }, [lotes, needle]);
+    return dias.find((d) => d.items.some((it) => it.placa.includes(needle))) || null;
+  }, [dias, needle]);
 
   useEffect(() => {
     if (hit) {
       setLoc(hit.loc);
-      setLoteId(hit.id);
+      setDiaId(hit.id);
       return;
     }
     const currentLoc = locators.find((l) => l.id === loc);
     if (!currentLoc) return;
-    const stillThere = locLotes.some((l) => l.id === loteId);
+    const stillThere = locDias.some((d) => d.id === diaId);
     if (!stillThere) {
-      setLoteId(currentLoc.primeiroPendente || locLotes[0]?.id || "");
+      setDiaId(currentLoc.primeiroPendente || locDias[0]?.id || "");
     }
-  }, [hit, loc, locators, locLotes, loteId]);
+  }, [hit, loc, locators, locDias, diaId]);
 
-  const lote = locLotes.find((l) => l.id === loteId) || locLotes[0];
-  const loteIndex = Math.max(0, locLotes.findIndex((l) => l.id === lote?.id));
+  const dia = locDias.find((d) => d.id === diaId) || locDias[0];
+  const diaIndex = Math.max(0, locDias.findIndex((d) => d.id === dia?.id));
   const locator = locators.find((l) => l.id === loc);
 
   async function copyZap() {
-    if (!lote?.whatsapp) return;
+    if (!dia?.whatsapp) return;
     try {
-      await navigator.clipboard.writeText(lote.whatsapp);
+      await navigator.clipboard.writeText(dia.whatsapp);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      window.prompt("Copie o texto do lote:", lote.whatsapp);
+      window.prompt("Copie o texto do dia:", dia.whatsapp);
     }
   }
 
   function go(delta) {
-    const next = locLotes[loteIndex + delta];
-    if (next) setLoteId(next.id);
+    const next = locDias[diaIndex + delta];
+    if (next) setDiaId(next.id);
   }
 
   if (loading && !data) {
@@ -105,7 +105,8 @@ export default function LocalizadosPanel({
         <p className="loc-kicker">Checklist de posição</p>
         <h2>Confirma com o localizador</h2>
         <p className="loc-sub">
-          Um lote de até 6. Copia o Zap, pergunta, marca Sim ou Não. Assessoria só depois do Sim.
+          Manda o dia inteiro no Zap. Ele diz quais ainda têm posição. Você marca Sim ou Não.
+          Assessoria só depois do Sim.
         </p>
       </div>
 
@@ -120,7 +121,7 @@ export default function LocalizadosPanel({
             className={item.id === loc ? "is-active" : ""}
             onClick={() => {
               setLoc(item.id);
-              setLoteId(item.primeiroPendente || "");
+              setDiaId(item.primeiroPendente || "");
             }}
           >
             <strong>{item.nome}</strong>
@@ -131,8 +132,8 @@ export default function LocalizadosPanel({
         ))}
       </div>
 
-      {!lote ? (
-        <div className="loc-empty">Nenhum lote para {locator?.nome || loc}.</div>
+      {!dia ? (
+        <div className="loc-empty">Nenhum dia para {locator?.nome || loc}.</div>
       ) : locator?.pendente === 0 ? (
         <div className="loc-done">
           <strong>{locator.nome} está em dia</strong>
@@ -140,66 +141,68 @@ export default function LocalizadosPanel({
         </div>
       ) : null}
 
-      {lote ? (
+      {dia ? (
         <div className="loc-lote">
           <div className="loc-lote-top">
             <div>
               <h3>
-                {locator?.nome} · lote {lote.num}
-                {lote.diaLabel ? ` · ${lote.diaLabel}` : ""}
+                {locator?.nome} · {dia.diaLabel}
+                {` · ${dia.carros} carro${dia.carros === 1 ? "" : "s"}`}
               </h3>
               <p>
-                {lote.cidade}
-                {lote.tipo ? ` · ${lote.tipo}` : ""}
+                {dia.cidade}
+                {dia.juntos ? " · alguns juntos no horário" : ""}
               </p>
             </div>
             <div className="loc-counts">
               <span>
-                <b className="pendente">{lote.pendente}</b> ?
+                <b className="pendente">{dia.pendente}</b> ?
               </span>
               <span>
-                <b className="sim">{lote.sim}</b> sim
+                <b className="sim">{dia.sim}</b> sim
               </span>
               <span>
-                <b className="nao">{lote.nao}</b> não
+                <b className="nao">{dia.nao}</b> não
               </span>
             </div>
           </div>
 
-          {lote.dica ? <p className="loc-dica">{lote.dica}</p> : null}
+          {dia.dica ? <p className="loc-dica">{dia.dica}</p> : null}
 
           <button
             type="button"
             className={`loc-copy${copied ? " is-ok" : ""}`}
             onClick={copyZap}
           >
-            {copied ? "Copiado. Cola no Zap." : "Copiar texto do Zap"}
+            {copied
+              ? "Copiado. Cola no Zap."
+              : `Copiar os ${dia.carros} carros de ${dia.diaLabel}`}
           </button>
 
           <div className="loc-nav">
-            <button type="button" disabled={loteIndex <= 0} onClick={() => go(-1)}>
-              Anterior
+            <button type="button" disabled={diaIndex <= 0} onClick={() => go(-1)}>
+              Dia anterior
             </button>
             <span>
-              {loteIndex + 1} / {locLotes.length}
+              {diaIndex + 1} / {locDias.length}
             </span>
             <button
               type="button"
-              disabled={loteIndex >= locLotes.length - 1}
+              disabled={diaIndex >= locDias.length - 1}
               onClick={() => go(1)}
             >
-              Próximo
+              Próximo dia
             </button>
           </div>
 
-          {lote.pendente === 0 && loteIndex < locLotes.length - 1 ? (
+          {dia.pendente === 0 && diaIndex < locDias.length - 1 ? (
             <button type="button" className="loc-copy is-ok" onClick={() => go(1)}>
-              Lote ok. Ir para o próximo
+              Dia ok. Ir para o próximo
             </button>
           ) : null}
 
           <div className="loc-cars">
-            {lote.items.map((car) => (
+            {dia.items.map((car) => (
               <article
                 key={car.placa}
                 className={`loc-car ${locClass(car.posicao)}${needle && car.placa.includes(needle) ? " is-hit" : ""}`}

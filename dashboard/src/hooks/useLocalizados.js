@@ -9,18 +9,18 @@ async function localizadosFetch(url, options = {}) {
 
 function patchPosicao(data, placa, posicao) {
   if (!data || !placa) return data;
-  const lotes = (data.lotes || []).map((lote) => {
-    if (!lote.items?.some((it) => it.placa === placa)) return lote;
-    const items = lote.items.map((it) => (it.placa === placa ? { ...it, posicao } : it));
+  const dias = (data.dias || data.lotes || []).map((dia) => {
+    if (!dia.items?.some((it) => it.placa === placa)) return dia;
+    const items = dia.items.map((it) => (it.placa === placa ? { ...it, posicao } : it));
     const counts = { pendente: 0, sim: 0, nao: 0, total: items.length };
     for (const it of items) {
       if (it.posicao === "Sim") counts.sim += 1;
       else if (it.posicao === "Não") counts.nao += 1;
       else counts.pendente += 1;
     }
-    return { ...lote, items, ...counts };
+    return { ...dia, items, ...counts, carros: counts.total };
   });
-  const items = lotes.flatMap((l) => l.items);
+  const items = dias.flatMap((d) => d.items);
   const counts = { pendente: 0, sim: 0, nao: 0, total: items.length };
   for (const it of items) {
     if (it.posicao === "Sim") counts.sim += 1;
@@ -35,10 +35,10 @@ function patchPosicao(data, placa, posicao) {
       else if (it.posicao === "Não") locCounts.nao += 1;
       else locCounts.pendente += 1;
     }
-    const primeiro = lotes.find((l) => l.loc === loc.id && l.pendente > 0);
+    const primeiro = dias.find((d) => d.loc === loc.id && d.pendente > 0);
     return { ...loc, ...locCounts, primeiroPendente: primeiro?.id || loc.primeiroPendente };
   });
-  return { ...data, lotes, locators, counts };
+  return { ...data, dias, lotes: dias, locators, counts };
 }
 
 export function useLocalizados({ enabled = true } = {}) {
@@ -69,10 +69,7 @@ export function useLocalizados({ enabled = true } = {}) {
   const mark = useCallback(async ({ placa, posicao, obs }) => {
     setSaving(true);
     setError(null);
-    setData((cur) => {
-      // keep previous for rollback via ref in catch using functional update
-      return patchPosicao(cur, placa, posicao);
-    });
+    setData((cur) => patchPosicao(cur, placa, posicao));
     try {
       const result = await localizadosFetch("/api/localizados", {
         method: "POST",

@@ -160,7 +160,7 @@
 .loc-car {
   border: 1px solid var(--line);
   border-radius: 16px;
-  padding: 12px;
+  padding: 10px 12px;
   background: rgba(255, 255, 255, 0.02);
 }
 
@@ -201,7 +201,7 @@
 }
 
 .loc-actions button {
-  min-height: 52px;
+  min-height: 44px;
   border-radius: 14px;
   border: 1px solid var(--line);
   font-weight: 700;

@@ -46,9 +46,9 @@ A UI chama `/api/dashboard`, servida pela function em `api/dashboard.js`.
 
 ### Localizados (posição)
 
-Aba **Local** no app. Confirma com Bira, Carlos ou Maciel se ainda tem a posição — um lote de até 6, texto pronto para o Zap. Marca Sim/Não; grava na aba `Localizados` da planilha.
+Aba **Local** no app. Confirma com Bira, Carlos ou Maciel se ainda tem a posição — **todos os carros daquela data** no Zap. Marca Sim/Não; grava na aba `Localizados` da planilha.
 
-- `GET /api/localizados` — lotes e checklist
+- `GET /api/localizados` — dias e checklist
 - `POST /api/localizados` — `{ placa, posicao: "Pendente" | "Sim" | "Não" }`
 
 Não mistura com Radar Feira, NFS-e nem prêmio. Detalhes em `CONTEXTO-LOCALIZADOS.md`.

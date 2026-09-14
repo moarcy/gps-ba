@@ -29,8 +29,8 @@ Por isso a ordem de trabalho é:
 - **1 placa = 1 linha = última data** que bateu. Se localizou de novo, vale a última.
 - No mesmo dia, a ordem é a **ronda**: do primeiro horário ao último.
 - Na operação, o **dia mais recente fica em cima** (posição mais quente).
-- Lotes de WhatsApp: no máximo **6 carros**. Manda 1 lote, espera resposta, manda o próximo.
-- Se dois carros do mesmo lote bateram em até **45 min**, provavelmente estão perto.
+- WhatsApp: **todos os carros daquela data**, um dia de cada vez. No dia, ordem da ronda.
+- Se dois carros do mesmo dia bateram em até **45 min**, provavelmente estão perto.
 
 ## Status que o Moarcy marca (coluna Posição?)
 
@@ -59,7 +59,7 @@ Planilha: https://docs.google.com/spreadsheets/d/1QBcAEqK9MNbP4DiqN4rhPAm-rUXQlh
 - `google-sheets/lib/localizador-lotes.js` — datas, lotes, checklist.
 - `google-sheets/push-localizados-status.js` — sobe as abas.
 
-Na aba **Local** do app (celular ou computador): escolhe Bira / Carlos / Maciel, copia o Zap do lote, marca **Sim** ou **Não**. Grava na mesma aba Localizados da planilha.
+Na aba **Local** do app: escolhe Bira / Carlos / Maciel, copia o Zap **do dia inteiro**, marca **Sim** ou **Não**. Grava na aba Localizados da planilha.
 
 - `GET /api/localizados` — lotes e checklist
 - `POST /api/localizados` — `{ placa, posicao: "Pendente"|"Sim"|"Não" }`
@@ -80,6 +80,6 @@ Preserva Posição? e Obs. Precisa do ZIP na raiz do projeto e de `google-sheets
 ## Próximos passos naturais num chat novo
 
 1. Conferir o que está **Pendente** na aba Localizados.
-2. Mandar o próximo lote do txt para Bira, Carlos ou Maciel.
+2. Mandar o dia inteiro no Zap para Bira, Carlos ou Maciel.
 3. Marcar Sim/Não conforme a resposta.
 4. Quando houver Sim, montar mensagem só desses para a assessoria.
