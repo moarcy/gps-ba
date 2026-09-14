@@ -13,8 +13,10 @@ import AddVehicleSheet from "./AddVehicleSheet";
 import CrmPanel from "./crm/CrmPanel";
 import { useCrm } from "./hooks/useCrm";
 import { useDashboard } from "./hooks/useDashboard";
+import { useLocalizados } from "./hooks/useLocalizados";
 import { useNfse } from "./hooks/useNfse";
 import { formatBRL, formatDate } from "./lib/format";
+import LocalizadosPanel from "./localizados/LocalizadosPanel";
 import NfsePanel from "./nfse/NfsePanel";
 import "./index.css";
 
@@ -224,11 +226,23 @@ function IconNfse() {
   );
 }
 
+function IconLocal() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        fill="currentColor"
+        d="M12 3.2a6.3 6.3 0 0 0-6.3 6.3c0 4.7 6.3 11.3 6.3 11.3s6.3-6.6 6.3-11.3A6.3 6.3 0 0 0 12 3.2Zm0 8.5a2.2 2.2 0 1 1 0-4.4 2.2 2.2 0 0 1 0 4.4Z"
+      />
+    </svg>
+  );
+}
+
 export default function App() {
   const { data, loading, error, reload } = useDashboard();
   const [tab, setTab] = useState("resumo");
   const crm = useCrm({ enabled: tab === "crm" });
   const nfse = useNfse({ enabled: tab === "nfse" });
+  const localizados = useLocalizados({ enabled: tab === "local" });
   const [month, setMonth] = useState("all");
   const [assessoria, setAssessoria] = useState("all");
   const [loc1, setLoc1] = useState("all");
@@ -467,29 +481,42 @@ export default function App() {
             <p className="brand-sub hide-mobile">Controle de Diligências</p>
           </div>
           <div className="header-actions">
-            <button
-              type="button"
-              className="icon-btn"
-              aria-label="Adicionar veículo"
-              onClick={() => setAddOpen(true)}
-            >
-              <IconPlus />
-            </button>
-            <button
-              type="button"
-              className="icon-btn icon-btn-filters"
-              aria-label="Filtros"
-              onClick={() => setFiltersOpen(true)}
-            >
-              <IconFilter />
-              {activeFilterCount > 0 && <span className="badge">{activeFilterCount}</span>}
-            </button>
+            {tab !== "local" && (
+              <button
+                type="button"
+                className="icon-btn"
+                aria-label="Adicionar veículo"
+                onClick={() => setAddOpen(true)}
+              >
+                <IconPlus />
+              </button>
+            )}
+            {tab !== "nfse" && tab !== "local" && (
+              <button
+                type="button"
+                className="icon-btn icon-btn-filters"
+                aria-label="Filtros"
+                onClick={() => setFiltersOpen(true)}
+              >
+                <IconFilter />
+                {activeFilterCount > 0 && <span className="badge">{activeFilterCount}</span>}
+              </button>
+            )}
             <button
               type="button"
               className="icon-btn icon-btn-primary"
               aria-label="Atualizar"
-              disabled={loading}
-              onClick={() => reload({ refresh: true })}
+              disabled={
+                loading ||
+                (tab === "nfse" && nfse.loading) ||
+                (tab === "local" && localizados.loading)
+              }
+              onClick={() => {
+                if (tab === "nfse") nfse.reload();
+                else if (tab === "crm") crm.reload();
+                else if (tab === "local") localizados.reload();
+                else reload({ refresh: true });
+              }}
             >
               <IconRefresh />
             </button>
@@ -505,7 +532,9 @@ export default function App() {
                 ? "Buscar no CRM: placa, loc, assessoria, status…"
                 : tab === "nfse"
                   ? "Tomadores e emissões na aba NFS-e"
-                  : "Buscar placa, assessoria, banco, loc…"
+                  : tab === "local"
+                    ? "Buscar placa no lote…"
+                    : "Buscar placa, assessoria, banco, loc…"
             }
             enterKeyHint="search"
             aria-label="Buscar"
@@ -515,6 +544,7 @@ export default function App() {
         <nav className="desktop-nav desktop-only" aria-label="Navegação principal">
           {[
             ["resumo", "Resumo"],
+            ["local", "Local"],
             ["crm", "CRM"],
             ["nfse", "NFS-e"],
             ["veiculos", "Veículos"],
@@ -533,7 +563,7 @@ export default function App() {
       </header>
 
       <main className={`tab-panels tab-${tab}`}>
-        <section className="filters desktop-filters desktop-only">{filtersForm}</section>
+        <section className={`filters desktop-filters desktop-only${tab === "nfse" || tab === "local" ? " is-hidden" : ""}`}>{filtersForm}</section>
 
         {/* RESUMO */}
         <section className={`tab-panel ${tab === "resumo" ? "is-active" : ""}`}>
@@ -812,6 +842,19 @@ export default function App() {
           </div>
         </section>
 
+        {/* Localizados / posição */}
+        <section className={`tab-panel ${tab === "local" ? "is-active" : ""}`}>
+          <LocalizadosPanel
+            data={localizados.data}
+            loading={localizados.loading}
+            error={localizados.error}
+            saving={localizados.saving}
+            onReload={localizados.reload}
+            onMark={localizados.mark}
+            searchQuery={q}
+          />
+        </section>
+
         {/* CRM */}
         <section className={`tab-panel ${tab === "crm" ? "is-active" : ""}`}>
           <CrmPanel
@@ -849,6 +892,14 @@ export default function App() {
         >
           <IconHome />
           <span>Resumo</span>
+        </button>
+        <button
+          type="button"
+          className={tab === "local" ? "is-active" : ""}
+          onClick={() => setTab("local")}
+        >
+          <IconLocal />
+          <span>Local</span>
         </button>
         <button
           type="button"

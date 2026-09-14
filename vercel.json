@@ -18,6 +18,14 @@
     "api/crm.js": {
       "memory": 1024,
       "maxDuration": 60
+    },
+    "api/nfse.js": {
+      "memory": 1024,
+      "maxDuration": 300
+    },
+    "api/localizados.js": {
+      "memory": 1024,
+      "maxDuration": 60
     }
   }
 }

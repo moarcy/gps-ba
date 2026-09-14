@@ -1,0 +1,16 @@
+---
+description: Contexto GPS BA de localizados, Locgram, lotes e checklist de posição. Leia CONTEXTO-LOCALIZADOS.md.
+alwaysApply: true
+---
+
+# Localizados — não começar do zero
+
+Antes de mexer em placa, Locgram, localizador, assessoria, lote ou checklist, leia `CONTEXTO-LOCALIZADOS.md`.
+
+- Bira/Carlos = Salvador. Maciel = Barreiras.
+- 1 placa = última data. No dia, ordem da ronda (começo → fim). Dia recente em cima.
+- Operação: aba **Localizados** (local + data + Posição? Pendente/Sim/Não). Não apagar marcas no sync.
+- No app: aba **Local** — um lote, copiar Zap, marcar Sim/Não (`/api/localizados`).
+- Zap: `lotes-localizadores.txt`, no máximo 6 carros, um lote por vez.
+- Assessoria só depois de Posição = Sim.
+- Regenerar: `google-sheets` → `npm run localizados:status`.

@@ -588,14 +588,14 @@ button:disabled {
 
 .bottom-nav {
   position: fixed;
-  left: 12px;
-  right: 12px;
+  left: 8px;
+  right: 8px;
   bottom: calc(10px + var(--safe-bottom));
   z-index: 30;
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 4px;
-  padding: 8px;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 2px;
+  padding: 6px;
   background: rgba(22, 28, 35, 0.96);
   backdrop-filter: blur(16px);
   border: 1px solid var(--line);
@@ -619,7 +619,7 @@ button:disabled {
 }
 
 .bottom-nav span {
-  font-size: 0.7rem;
+  font-size: 0.62rem;
   font-weight: 500;
   letter-spacing: 0.01em;
 }
@@ -812,6 +812,10 @@ button:disabled {
   display: none;
 }
 
+.desktop-filters.is-hidden {
+  display: none !important;
+}
+
 .tab-panel {
   display: none;
   /* sem fill-mode "both": o transform residual prende position:fixed dos sheets */
@@ -999,8 +1003,8 @@ th {
     background: transparent;
     color: var(--sand-dim);
     border-radius: 10px;
-    padding: 10px 12px;
-    font-size: 0.88rem;
+    padding: 10px 8px;
+    font-size: 0.82rem;
     font-weight: 500;
     cursor: pointer;
   }
@@ -1033,6 +1037,10 @@ th {
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 12px;
     margin-bottom: 16px;
+  }
+
+  .desktop-filters.is-hidden {
+    display: none !important;
   }
 
   .kpi-scroll {

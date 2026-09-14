@@ -14,6 +14,8 @@ import {
   upsertPagamento,
 } from "./lib/crm-service.js";
 import { buildDashboardPayload } from "./lib/dashboard-data.js";
+import { getLocalizadosData, updatePosicao } from "./lib/localizados-service.js";
+import { emitNfse, getNfseData, upsertTomador } from "./lib/nfse-service.js";
 import {
   mergeControleRecords,
   readGestorRecords,
@@ -160,6 +162,41 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (url.pathname === "/api/localizados" && req.method === "GET") {
+      const force = url.searchParams.get("refresh") === "1";
+      sendJson(res, 200, await getLocalizadosData({ force }));
+      return;
+    }
+
+    if (url.pathname === "/api/localizados" && (req.method === "POST" || req.method === "PATCH")) {
+      const body = await readJsonBody(req);
+      sendJson(res, 200, await updatePosicao(body));
+      return;
+    }
+
+    if (url.pathname === "/api/nfse" && req.method === "GET") {
+      sendJson(res, 200, await getNfseData());
+      return;
+    }
+
+    if (url.pathname === "/api/nfse" && req.method === "POST") {
+      const body = await readJsonBody(req);
+      const action = body.action || body.op || "emit";
+
+      if (action === "upsert_tomador" || action === "tomador") {
+        sendJson(res, 200, await upsertTomador(body.tomador || body));
+        return;
+      }
+
+      if (action === "emit" || action === "emitir") {
+        sendJson(res, 200, await emitNfse(body));
+        return;
+      }
+
+      sendJson(res, 400, { error: "action inválida. Use: emit | upsert_tomador" });
+      return;
+    }
+
     sendJson(res, 404, { error: "Not found" });
   } catch (error) {
     console.error(error);
@@ -177,4 +214,8 @@ server.listen(PORT, () => {
   console.log(`  GET  /api/crm`);
   console.log(`  POST /api/crm`);
   console.log(`  POST /api/vehicles`);
+  console.log(`  GET  /api/nfse`);
+  console.log(`  POST /api/nfse`);
+  console.log(`  GET  /api/localizados`);
+  console.log(`  POST /api/localizados`);
 });

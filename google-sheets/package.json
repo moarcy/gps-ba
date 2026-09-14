@@ -10,7 +10,8 @@
     "api": "node api-server.js",
     "import:locgram": "node import-locgram-chat.js",
     "normalize:loc": "node normalize-crm-localizadores.js",
-    "normalize:crm": "node normalize-crm-fields.js"
+    "normalize:crm": "node normalize-crm-fields.js",
+    "localizados:status": "node push-localizados-status.js"
   },
   "dependencies": {
     "dotenv": "^16.4.7",
