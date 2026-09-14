@@ -24,7 +24,8 @@ Por isso a ordem de trabalho é:
 
 ## Regras dos dados
 
-- Fonte principal: ZIP `Conversa do WhatsApp com Locgram Atendimento (2).zip` (chat Locgram, 10/03/2026 → 12/09/2026).
+- Fonte ao vivo: Evolution no notebook escuta o Locgram e joga a placa na aba **Localizados** (Pendente).
+- Histórico: ZIP `Conversa do WhatsApp com Locgram Atendimento (2).zip` (chat Locgram, 10/03/2026 → 12/09/2026).
 - Listas manuais: **Lista Bira** + listas do Maciel (09/09/2026). Placa que não está no ZIP **não some** — entra na aba.
 - **1 placa = 1 linha = última data** que bateu. Se localizou de novo, vale a última.
 - No mesmo dia, a ordem é a **ronda**: do primeiro horário ao último.
@@ -59,7 +60,9 @@ Planilha: https://docs.google.com/spreadsheets/d/1QBcAEqK9MNbP4DiqN4rhPAm-rUXQlh
 - `google-sheets/lib/localizador-lotes.js` — datas, lotes, checklist.
 - `google-sheets/push-localizados-status.js` — sobe as abas.
 
-Na aba **Local** do app: escolhe Bira / Carlos / Maciel, copia o Zap **do dia inteiro**, marca **Sim** ou **Não**. Grava na aba Localizados da planilha.
+Na aba **Local** do app: escolhe Bira / Carlos / Maciel, copia o Zap **do dia inteiro**, marca **Sim** ou **Não**. A Evolution **não** fala com o loc — só coleta a batida.
+
+Worker: `whatsapp-locgram/` (notebook, igual o Telegram). Webhook `http://127.0.0.1:8790/webhook`.
 
 - `GET /api/localizados` — lotes e checklist
 - `POST /api/localizados` — `{ placa, posicao: "Pendente"|"Sim"|"Não" }`

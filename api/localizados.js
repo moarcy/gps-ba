@@ -1,4 +1,4 @@
-import { getLocalizadosData, updatePosicao } from "../google-sheets/lib/localizados-service.js";
+import { getLocalizadosData, ingestLocgramHit, updatePosicao } from "../google-sheets/lib/localizados-service.js";
 
 function readJsonBody(req) {
   if (req.body && typeof req.body === "object") return req.body;
@@ -29,6 +29,18 @@ export default async function handler(req, res) {
 
     if (req.method === "POST" || req.method === "PATCH") {
       const body = readJsonBody(req);
+      const action = body.action || body.op;
+      if (action === "ingest" || action === "locgram") {
+        if (process.env.VERCEL) {
+          res.status(403).json({
+            error: "Coleta Locgram roda no notebook (Evolution), não na Vercel.",
+          });
+          return;
+        }
+        const result = await ingestLocgramHit(body);
+        res.status(200).json(result);
+        return;
+      }
       const result = await updatePosicao(body);
       res.status(200).json(result);
       return;

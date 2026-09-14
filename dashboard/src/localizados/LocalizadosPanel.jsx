@@ -105,7 +105,7 @@ export default function LocalizadosPanel({
         <p className="loc-kicker">Checklist de posição</p>
         <h2>Confirma com o localizador</h2>
         <p className="loc-sub">
-          Manda o dia inteiro no Zap. Ele diz quais ainda têm posição. Você marca Sim ou Não.
+          Um dia de cada vez. Locgram entra sozinho (Evolution no notebook). Você pergunta a posição e marca Sim ou Não.
           Assessoria só depois do Sim.
         </p>
       </div>

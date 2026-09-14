@@ -8,7 +8,9 @@ import {
   applyPosicaoOnWorksheet,
   normalizePosicao,
   readLocalizadosOps,
+  upsertLocalizadosOpsRow,
 } from "./localizador-lotes.js";
+import { parseLocgramLive } from "./parse-locgram-live.js";
 
 const LOC_META = {
   BIRA: { nome: "Bira", cidade: "Salvador" },
@@ -273,4 +275,58 @@ export async function updatePosicao({ placa, posicao, obs } = {}) {
 
   const item = payload.dias.flatMap((d) => d.items).find((it) => it.placa === plate);
   return { ok: true, placa: plate, posicao: next, obs: item?.obs || obsText || "", item, data: payload };
+}
+
+export async function ingestLocgramHit(body = {}) {
+  const text = body.text || body.rawWhatsapp || body.message || "";
+  const parsed = body.placa
+    ? {
+        ok: true,
+        placa: normalizePlaca(body.placa),
+        veiculo: normalizeText(body.veiculo),
+        loc: String(body.loc || "OUTROS").toUpperCase(),
+        cidade: body.cidade || body.local || "",
+        ts: Number(body.ts) || Date.now(),
+      }
+    : parseLocgramLive(text, { receivedAt: body.ts });
+
+  if (parsed.skip) {
+    return { ok: true, skipped: true, reason: "not-locgram" };
+  }
+  if (!parsed.ok) {
+    throw Object.assign(new Error(parsed.error || "Não deu para ler a ocorrência do Locgram."), {
+      status: 400,
+    });
+  }
+
+  const { workbook, localPath } = await loadWorkbook({ useCache: false });
+  const ws = workbook.getWorksheet(LOCALIZADOS_OPS_SHEET);
+  if (!ws) {
+    throw Object.assign(
+      new Error("Aba Localizados ainda não existe. Rode npm run localizados:status."),
+      { status: 404, code: "NO_SHEET" },
+    );
+  }
+
+  const result = upsertLocalizadosOpsRow(ws, parsed);
+  if (!result.ok) {
+    throw Object.assign(new Error("Falha ao gravar na aba Localizados."), { status: 500 });
+  }
+  if (result.skipped) {
+    return { ok: true, ...result };
+  }
+
+  workbook.calcProperties.fullCalcOnLoad = true;
+  await workbook.xlsx.writeFile(localPath);
+  await uploadExcel(gestorId(), localPath);
+
+  const payload = buildPayload(readLocalizadosOps(ws));
+  cache.payload = payload;
+  cache.loadedAt = Date.now();
+
+  return {
+    ok: true,
+    ...result,
+    item: payload.dias.flatMap((d) => d.items).find((it) => it.placa === result.placa) || null,
+  };
 }

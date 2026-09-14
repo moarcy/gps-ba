@@ -780,3 +780,119 @@ export function applyPosicaoOnWorksheet(ws, placa, posicao, obs) {
   }
   return found;
 }
+
+function paintOpsCell(cell, { bg, bold = false, wrap = false }) {
+  cell.font = { name: "Arial", size: 10, bold, color: { argb: "FF111827" } };
+  if (bg) {
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: bg } };
+  }
+  cell.alignment = {
+    vertical: "middle",
+    horizontal: wrap ? "left" : "center",
+    wrapText: wrap,
+  };
+  cell.border = {
+    top: { style: "thin", color: { argb: "FFD1D5DB" } },
+    left: { style: "thin", color: { argb: "FFD1D5DB" } },
+    bottom: { style: "thin", color: { argb: "FFD1D5DB" } },
+    right: { style: "thin", color: { argb: "FFD1D5DB" } },
+  };
+}
+
+function lastPlacaRow(ws, placaCol) {
+  let last = 2;
+  for (let r = 3; r <= ws.rowCount; r++) {
+    if (normalizePlaca(cellValue(ws.getCell(r, placaCol)))) last = r;
+  }
+  return last;
+}
+
+/** Inclui ou atualiza 1 placa na aba Localizados. Preserva Sim/Não. 1 placa = último hit. */
+export function upsertLocalizadosOpsRow(ws, hit) {
+  if (!ws) return { ok: false, reason: "no-sheet" };
+  const cols = sheetHeaderMap(ws, 2);
+  const placaCol = cols.placa;
+  if (!placaCol) return { ok: false, reason: "no-placa-col" };
+
+  const placa = normalizePlaca(hit.placa);
+  if (!placa) return { ok: false, reason: "no-placa" };
+
+  const ts = Number(hit.ts) || Date.now();
+  const when = new Date(ts);
+  const hora = `${String(when.getHours()).padStart(2, "0")}:${String(when.getMinutes()).padStart(2, "0")}`;
+  const dateVal = new Date(when.getFullYear(), when.getMonth(), when.getDate());
+  const loc = String(hit.loc || "OUTROS").toUpperCase();
+  const cidade = hit.cidade || hit.local || "";
+  const veiculo = hit.veiculo || "";
+
+  let rowNum = 0;
+  for (let r = 3; r <= ws.rowCount; r++) {
+    if (normalizePlaca(cellValue(ws.getCell(r, placaCol))) === placa) {
+      rowNum = r;
+      break;
+    }
+  }
+
+  let created = false;
+  let posicao = hit.posicao || "Pendente";
+  if (rowNum) {
+    const existing = readLocalizadosOps(ws).find((it) => it.placa === placa);
+    if (existing?.ts && ts + 1000 < existing.ts) {
+      return { ok: true, skipped: true, reason: "older", placa, posicao: existing.posicao };
+    }
+    posicao = existing?.posicao || "Pendente";
+  } else {
+    rowNum = lastPlacaRow(ws, placaCol) + 1;
+    created = true;
+    posicao = "Pendente";
+  }
+
+  const row = ws.getRow(rowNum);
+  if (cols.data) {
+    const cell = row.getCell(cols.data);
+    cell.value = dateVal;
+    cell.numFmt = "DD/MM/YYYY";
+    paintOpsCell(cell, { bg: "FFFFFFFF" });
+  }
+  if (cols.hora) {
+    const cell = row.getCell(cols.hora);
+    cell.value = hora;
+    paintOpsCell(cell, { bg: "FFFFFFFF" });
+  }
+  if (cols.local) {
+    const cell = row.getCell(cols.local);
+    cell.value = cidade || null;
+    paintOpsCell(cell, { bg: "FFFFFFFF" });
+  }
+  if (cols.localizador) {
+    const cell = row.getCell(cols.localizador);
+    cell.value = loc;
+    paintOpsCell(cell, { bg: "FFFFFFFF", bold: true });
+  }
+  {
+    const cell = row.getCell(placaCol);
+    cell.value = placa;
+    paintOpsCell(cell, { bg: "FFFFFFFF", bold: true });
+  }
+  if (cols.veiculo) {
+    const cell = row.getCell(cols.veiculo);
+    cell.value = veiculo || null;
+    paintOpsCell(cell, { bg: "FFFFFFFF", wrap: true });
+  }
+  if (cols.posicao) {
+    const cell = row.getCell(cols.posicao);
+    cell.value = posicao;
+    paintOpsCell(cell, { bg: POSICAO_FILL[posicao] || POSICAO_FILL.Pendente, bold: true });
+    cell.dataValidation = {
+      type: "list",
+      allowBlank: false,
+      formulae: ['"Pendente,Sim,Não"'],
+      showErrorMessage: true,
+      errorTitle: "Posição",
+      error: "Escolha Pendente, Sim ou Não.",
+    };
+  }
+  row.height = 20;
+  row.commit();
+  return { ok: true, created, placa, loc, posicao, ts };
+}

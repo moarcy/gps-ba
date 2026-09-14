@@ -14,7 +14,7 @@ import {
   upsertPagamento,
 } from "./lib/crm-service.js";
 import { buildDashboardPayload } from "./lib/dashboard-data.js";
-import { getLocalizadosData, updatePosicao } from "./lib/localizados-service.js";
+import { getLocalizadosData, ingestLocgramHit, updatePosicao } from "./lib/localizados-service.js";
 import { emitNfse, getNfseData, upsertTomador } from "./lib/nfse-service.js";
 import {
   mergeControleRecords,
@@ -170,6 +170,11 @@ const server = http.createServer(async (req, res) => {
 
     if (url.pathname === "/api/localizados" && (req.method === "POST" || req.method === "PATCH")) {
       const body = await readJsonBody(req);
+      const action = body.action || body.op;
+      if (action === "ingest" || action === "locgram") {
+        sendJson(res, 200, await ingestLocgramHit(body));
+        return;
+      }
       sendJson(res, 200, await updatePosicao(body));
       return;
     }

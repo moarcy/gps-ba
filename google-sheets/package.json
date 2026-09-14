@@ -8,10 +8,12 @@
     "audit": "node audit-controle.js",
     "sync": "node run-sync.js",
     "api": "node api-server.js",
+    "nfse-worker": "npm --prefix nfse-worker start",
     "import:locgram": "node import-locgram-chat.js",
     "normalize:loc": "node normalize-crm-localizadores.js",
     "normalize:crm": "node normalize-crm-fields.js",
-    "localizados:status": "node push-localizados-status.js"
+    "localizados:status": "node push-localizados-status.js",
+    "locgram:listen": "npm start --prefix ../whatsapp-locgram"
   },
   "dependencies": {
     "dotenv": "^16.4.7",
