@@ -3,7 +3,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node src/index.js"
+    "start": "node src/index.js",
+    "setup": "node src/setup-webhook.js",
+    "chats": "node src/find-locgram-jid.js"
   },
   "dependencies": {
     "dotenv": "^16.4.7"

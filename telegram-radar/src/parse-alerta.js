@@ -81,6 +81,25 @@ function parseFaixa(text) {
   return m ? m[1].trim() : "";
 }
 
+function cleanPlace(value) {
+  return String(value || "")
+    .replace(/^FAIXA\s*\d+\s*/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export function parseRota(camera, faixa) {
+  const src = String(faixa || camera || "");
+  const m = src.match(/(.+?)\s*(?:->|→)\s*(.+)/);
+  if (m) {
+    const from = cleanPlace(m[1]);
+    const to = cleanPlace(m[2]);
+    if (from && to) return { from, to, label: `${from} → ${to}` };
+  }
+  const cam = String(camera || "").trim();
+  return { from: "", to: "", label: cam || "(sem rota)" };
+}
+
 export function isBlacklistAlert(text) {
   const t = fold(text);
   return t.includes("ALERTA") && t.includes("PLACA") && (t.includes("BLACKLIST") || t.includes("PLACA-ALVO") || t.includes("PLACA ALVO"));
@@ -102,11 +121,17 @@ export function parseAlerta(text, { mapsUrl = "" } = {}) {
   const dataRaw = field(raw, "Data\\/Hora") || field(raw, "Data");
   const when = parseDataHora(dataRaw || raw);
   const { lat, lon } = parseLatLon(raw);
+  const cameraClean = camera.replace(/\s*\(\[.*$/, "").trim();
+  const faixa = parseFaixa(raw);
+  const rota = parseRota(cameraClean, faixa);
 
   return {
     placa: normalizePlaca(placaMatch[1]),
-    camera: camera.replace(/\s*\(\[.*$/, "").trim(),
-    faixa: parseFaixa(raw),
+    camera: cameraClean,
+    faixa,
+    rota: rota.label,
+    origemRota: rota.from,
+    destinoRota: rota.to,
     dataHora: when.dataHora,
     iso: when.iso,
     weekday: when.weekday,

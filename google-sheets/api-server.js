@@ -14,8 +14,10 @@ import {
   upsertPagamento,
 } from "./lib/crm-service.js";
 import { buildDashboardPayload } from "./lib/dashboard-data.js";
+import { handleIlocWebhook } from "./lib/iloc-webhook.js";
 import { getLocalizadosData, ingestLocgramHit, updatePosicao } from "./lib/localizados-service.js";
 import { emitNfse, getNfseData, upsertTomador } from "./lib/nfse-service.js";
+import { getRadarData } from "./lib/radar-service.js";
 import {
   mergeControleRecords,
   readGestorRecords,
@@ -129,6 +131,11 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (url.pathname === "/api/webhooks/iloc") {
+      await handleIlocWebhook(req, res);
+      return;
+    }
+
     if (url.pathname === "/api/dashboard" && req.method === "GET") {
       const force = url.searchParams.get("refresh") === "1";
       const data = await getDashboardData({ force });
@@ -179,6 +186,11 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (url.pathname === "/api/radar" && req.method === "GET") {
+      sendJson(res, 200, await getRadarData());
+      return;
+    }
+
     if (url.pathname === "/api/nfse" && req.method === "GET") {
       sendJson(res, 200, await getNfseData());
       return;
@@ -212,10 +224,11 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, () => {
-  console.log(`GPS BA Dashboard API → http://localhost:${PORT}`);
+server.listen(PORT, "127.0.0.1", () => {
+  console.log(`GPS BA Dashboard API → http://127.0.0.1:${PORT}`);
   console.log(`  GET  /api/health`);
   console.log(`  GET  /api/dashboard`);
+  console.log(`  GET  /api/radar`);
   console.log(`  GET  /api/crm`);
   console.log(`  POST /api/crm`);
   console.log(`  POST /api/vehicles`);
@@ -223,4 +236,5 @@ server.listen(PORT, () => {
   console.log(`  POST /api/nfse`);
   console.log(`  GET  /api/localizados`);
   console.log(`  POST /api/localizados`);
+  console.log(`  POST /api/webhooks/iloc`);
 });

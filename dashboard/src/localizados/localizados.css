@@ -257,6 +257,40 @@
   margin-bottom: 6px;
 }
 
+.loc-root.is-phone .loc-people {
+  display: flex;
+  gap: 0;
+  padding: 3px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--line);
+}
+
+.loc-root.is-phone .loc-people button {
+  flex: 1;
+  min-height: 44px;
+  text-align: center;
+  border: 0;
+  background: transparent;
+  border-radius: 9px;
+  padding: 6px 4px;
+}
+
+.loc-root.is-phone .loc-people button.is-active {
+  background: var(--card);
+  color: var(--sand);
+  border-color: transparent;
+}
+
+.loc-root.is-phone .loc-people span {
+  margin-top: 2px;
+  font-size: 0.68rem;
+}
+
+.loc-root.is-phone .loc-actions button {
+  min-height: 48px;
+}
+
 @media (min-width: 860px) {
   .loc-actions button {
     min-height: 48px;

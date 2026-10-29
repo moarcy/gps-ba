@@ -15,6 +15,7 @@ export default function LocalizadosPanel({
   onReload,
   onMark,
   searchQuery = "",
+  phone = false,
 }) {
   const locators = data?.locators || [];
   const dias = data?.dias || data?.lotes || [];
@@ -100,15 +101,17 @@ export default function LocalizadosPanel({
   }
 
   return (
-    <div className="loc-root">
-      <div className="loc-head">
-        <p className="loc-kicker">Checklist de posição</p>
-        <h2>Confirma com o localizador</h2>
-        <p className="loc-sub">
-          Um dia de cada vez. Locgram entra sozinho (Evolution no notebook). Você pergunta a posição e marca Sim ou Não.
-          Assessoria só depois do Sim.
-        </p>
-      </div>
+    <div className={`loc-root${phone ? " is-phone" : ""}`}>
+      {!phone && (
+        <div className="loc-head">
+          <p className="loc-kicker">Checklist de posição</p>
+          <h2>Confirma com o localizador</h2>
+          <p className="loc-sub">
+            Um dia de cada vez. Locgram entra sozinho (Evolution no notebook). Você pergunta a posição e marca Sim ou Não.
+            Assessoria só depois do Sim.
+          </p>
+        </div>
+      )}
 
       {error ? <div className="loc-banner">{error}</div> : null}
 
@@ -126,7 +129,7 @@ export default function LocalizadosPanel({
           >
             <strong>{item.nome}</strong>
             <span>
-              {item.pendente} pendente · {item.cidade}
+              {phone ? item.pendente : `${item.pendente} pendente · ${item.cidade}`}
             </span>
           </button>
         ))}
@@ -212,7 +215,7 @@ export default function LocalizadosPanel({
                   <span>{car.hora || "—"}</span>
                 </div>
                 <p className="loc-car-meta">
-                  {[car.veiculo, car.data, car.local].filter(Boolean).join(" · ")}
+                  {[car.veiculo, phone ? null : car.data, car.local].filter(Boolean).join(" · ")}
                 </p>
                 <div className="loc-actions">
                   <button

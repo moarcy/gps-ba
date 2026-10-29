@@ -176,7 +176,7 @@ function clearControleDropdownValidations(worksheet, lastDataRow) {
     const col2 = match[3] || col1;
     const row2 = match[4] ? Number(match[4]) : row1;
     const touchesDropdownCol =
-      ["B", "C", "D"].includes(col1) || ["B", "C", "D"].includes(col2);
+      ["A", "B", "C", "D"].includes(col1) || ["A", "B", "C", "D"].includes(col2);
     const touchesDataRows = row2 >= DATA_START && row1 <= lastDataRow;
     if (touchesDropdownCol && touchesDataRows) delete model[key];
   }

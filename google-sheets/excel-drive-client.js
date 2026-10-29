@@ -9,6 +9,9 @@ import { google } from "googleapis";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.join(__dirname, ".env") });
 
+const XLSX_MIME =
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+const GOOGLE_SHEETS_MIME = "application/vnd.google-apps.spreadsheet";
 const SCOPES = ["https://www.googleapis.com/auth/drive"];
 
 /** Em Vercel/Lambda só /tmp é gravável. */
@@ -69,9 +72,20 @@ export async function getFileMeta(fileId) {
   const drive = await getDriveClient();
   const { data } = await drive.files.get({
     fileId,
-    fields: "id,name,mimeType,modifiedTime",
+    fields: "id,name,mimeType,modifiedTime,webViewLink",
+    supportsAllDrives: true,
   });
   return data;
+}
+
+async function etagDoArquivo(fileId) {
+  const drive = google.drive({ version: "v2", auth: getAuth() });
+  const { data } = await drive.files.get({
+    fileId,
+    fields: "etag",
+    supportsAllDrives: true,
+  });
+  return data.etag || "";
 }
 
 function cachePath(fileId) {
@@ -80,19 +94,32 @@ function cachePath(fileId) {
   return path.join(dir, `${fileId}.xlsx`);
 }
 
-export async function downloadExcel(fileId, { useCache = false } = {}) {
-  const localPath = cachePath(fileId);
+export async function downloadExcel(fileId, { useCache = false, versioned = false } = {}) {
+  const dir = getCacheDir();
+  fs.mkdirSync(dir, { recursive: true });
+  const localPath = versioned
+    ? path.join(dir, `${fileId}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.xlsx`)
+    : cachePath(fileId);
 
-  if (useCache && fs.existsSync(localPath)) {
+  if (!versioned && useCache && fs.existsSync(localPath)) {
     return localPath;
   }
 
   const drive = await getDriveClient();
+  const meta = await getFileMeta(fileId);
+  const etag = versioned ? await etagDoArquivo(fileId) : "";
   const dest = fs.createWriteStream(localPath);
 
+  const request =
+    meta.mimeType === GOOGLE_SHEETS_MIME
+      ? drive.files.export(
+          { fileId, mimeType: XLSX_MIME },
+          { responseType: "stream" },
+        )
+      : drive.files.get({ fileId, alt: "media" }, { responseType: "stream" });
+
   await new Promise((resolve, reject) => {
-    drive.files
-      .get({ fileId, alt: "media" }, { responseType: "stream" })
+    request
       .then(({ data }) => {
         data.on("end", resolve);
         data.on("error", reject);
@@ -101,7 +128,44 @@ export async function downloadExcel(fileId, { useCache = false } = {}) {
       .catch(reject);
   });
 
+  if (versioned) return { localPath, etag };
   return localPath;
+}
+
+export function descartarArquivo(localPath) {
+  if (!localPath) return;
+  fs.unlink(localPath, () => {});
+}
+
+function ehConflito(error) {
+  const status = Number(error?.response?.status || error?.status || error?.code);
+  if (status === 412) return true;
+  return /precondition/i.test(String(error?.message || ""));
+}
+
+/** Baixa, altera e sobe de novo. Se outra gravação entrou no meio, recomeça em cima da versão nova. */
+export async function editarPlanilha(fileId, mutator) {
+  const max = 4;
+  let lastError;
+  for (let tentativa = 1; tentativa <= max; tentativa++) {
+    const { localPath, etag } = await downloadExcel(fileId, { versioned: true });
+    try {
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.readFile(localPath);
+      const result = await mutator(workbook);
+      if (result?.skipUpload) return result.value;
+      workbook.calcProperties.fullCalcOnLoad = true;
+      await workbook.xlsx.writeFile(localPath);
+      await uploadExcel(fileId, localPath, { etag });
+      return result;
+    } catch (error) {
+      lastError = error;
+      if (error?.code !== "PLANILHA_CONFLITO" || tentativa === max) throw error;
+    } finally {
+      descartarArquivo(localPath);
+    }
+  }
+  throw lastError;
 }
 
 export async function loadWorkbook(fileId, options) {
@@ -162,19 +226,39 @@ export async function readSheet(fileId, sheetSelector = {}) {
   };
 }
 
-export async function uploadExcel(fileId, localPath) {
-  const drive = await getDriveClient();
-  const meta = await getFileMeta(fileId);
+export async function uploadExcel(fileId, localPath, { etag } = {}) {
+  if (etag) {
+    const drive = google.drive({ version: "v2", auth: getAuth() });
+    try {
+      await drive.files.update(
+        {
+          fileId,
+          media: {
+            mimeType: XLSX_MIME,
+            body: fs.createReadStream(localPath),
+          },
+          supportsAllDrives: true,
+        },
+        { headers: { "If-Match": etag } },
+      );
+    } catch (error) {
+      if (ehConflito(error)) {
+        throw Object.assign(new Error("planilha mudou durante a gravação"), { code: "PLANILHA_CONFLITO" });
+      }
+      throw error;
+    }
+    return;
+  }
 
+  const drive = await getDriveClient();
   await drive.files.update({
     fileId,
     media: {
-      mimeType: meta.mimeType,
+      mimeType: XLSX_MIME,
       body: fs.createReadStream(localPath),
     },
+    supportsAllDrives: true,
   });
-
-  return meta;
 }
 
 export async function writeCell(fileId, sheetSelector, cellRef, value) {

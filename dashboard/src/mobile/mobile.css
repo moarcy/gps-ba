@@ -1,0 +1,388 @@
+/* Casca do celular. Tudo fica sob .phone para o desktop (901px+) não herdar estes estilos. */
+
+.phone {
+  min-height: 100dvh;
+  max-width: 100%;
+  overflow-x: clip;
+  padding-bottom: calc(62px + var(--safe-bottom));
+  background: var(--ink);
+}
+
+.phone-header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  padding: calc(8px + var(--safe-top)) 16px 12px;
+  background: rgba(15, 20, 25, 0.92);
+  backdrop-filter: blur(18px);
+  border-bottom: 1px solid var(--line);
+}
+
+.phone-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 44px;
+}
+
+.phone-brand {
+  font-size: 1rem;
+}
+
+.phone-back {
+  min-height: 44px;
+  padding: 0 4px 0 0;
+  color: var(--sand);
+  font-size: 1rem;
+  font-weight: 500;
+}
+
+.phone-title {
+  margin: 2px 0 0;
+  font-family: var(--font-display);
+  font-size: 2rem;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+
+.phone-tools {
+  display: flex;
+  gap: 8px;
+}
+
+.phone-icon {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  background: var(--card);
+  border: 1px solid var(--line);
+  color: var(--sand);
+}
+
+.phone-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.phone-icon-primary {
+  background: #2a3440;
+}
+
+.phone-search {
+  margin-top: 10px;
+}
+
+.phone-search input {
+  width: 100%;
+  min-height: 44px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  padding: 0 14px;
+  font-size: 1rem;
+}
+
+.phone-chips {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 10px 16px 0;
+}
+
+.phone-chip {
+  flex: 0 0 auto;
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--sand);
+  font-size: 0.82rem;
+  font-weight: 500;
+}
+
+.phone-main {
+  padding: 12px 16px 20px;
+}
+
+.phone-hero {
+  border-radius: 20px;
+  padding: 22px 18px;
+  margin-bottom: 12px;
+  background: var(--card);
+  border: 1px solid var(--line);
+}
+
+.phone-hero-value {
+  margin: 8px 0 6px;
+  font-family: var(--font-display);
+  font-size: 2.4rem;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+
+.phone-segment {
+  display: flex;
+  gap: 0;
+  margin-bottom: 12px;
+  padding: 3px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--line);
+}
+
+.phone-segment button {
+  flex: 1;
+  min-height: 36px;
+  border-radius: 9px;
+  color: var(--sand-dim);
+  font-weight: 600;
+  font-size: 0.92rem;
+}
+
+.phone-segment button.is-active {
+  background: var(--card);
+  color: var(--sand);
+}
+
+.phone-group {
+  margin: 0 0 12px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.phone-group-label {
+  margin: 0;
+  padding: 12px 14px 0;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--sand-dim);
+  font-weight: 600;
+}
+
+.phone-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 52px;
+  padding: 12px 14px;
+  text-align: left;
+  color: var(--sand);
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+}
+
+.phone-group .phone-row:last-child {
+  border-bottom: 0;
+}
+
+.phone-row-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.phone-sub {
+  color: var(--sand-dim);
+  font-size: 0.82rem;
+}
+
+.phone-chevron {
+  color: var(--sand-dim);
+  font-size: 1.15rem;
+  line-height: 1;
+}
+
+.phone-rank {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-weight: 600;
+  font-size: 0.8rem;
+  flex-shrink: 0;
+}
+
+.phone-nav {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 30;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  padding: 4px 4px calc(4px + var(--safe-bottom));
+  background: rgba(22, 28, 35, 0.94);
+  backdrop-filter: blur(18px);
+  border-top: 1px solid var(--line);
+}
+
+.phone-nav button {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 2px;
+  min-height: 50px;
+  border-radius: 12px;
+  color: var(--sand-dim);
+  font-size: 0.68rem;
+  font-weight: 500;
+}
+
+.phone-nav svg {
+  width: 22px;
+  height: 22px;
+}
+
+.phone-nav button.is-active {
+  color: var(--sand);
+}
+
+.phone-state {
+  padding: 28px 8px;
+  text-align: center;
+}
+
+.phone-state h1 {
+  font-family: var(--font-display);
+  font-size: 1.6rem;
+  font-weight: 600;
+  margin: 8px 0;
+}
+
+.phone .loc-car .placa,
+.phone .radar-plate .placa,
+.phone .phone-row .placa,
+.phone .crm-sheet-placa {
+  font-size: 1.35rem;
+  letter-spacing: 0.05em;
+}
+
+.phone .radar-map {
+  height: 220px;
+}
+
+.phone .radar-plate {
+  align-items: center;
+  min-height: 56px;
+  gap: 8px;
+}
+
+.phone .radar-plate span {
+  display: inline;
+  margin-left: auto;
+  font-size: 0.82rem;
+}
+
+.phone .radar-kpi-line {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  color: var(--sand-dim);
+  font-size: 0.92rem;
+}
+
+.phone .radar-kpi-line strong {
+  color: var(--sand);
+  font-weight: 650;
+}
+
+.phone .crm-subnav button,
+.phone .crm-pay-filters button,
+.phone .crm-toolbar .btn {
+  min-height: 44px;
+}
+
+.phone .crm-phone-filas {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.phone .crm-phone-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-width: 100%;
+  min-width: 0;
+  overflow: visible;
+}
+
+.phone .crm-phone-status button {
+  flex: 0 1 auto;
+  max-width: 100%;
+  min-height: 40px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--sand-dim);
+  font-size: 0.82rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.phone .crm-phone-status button.is-active {
+  color: var(--sand);
+  background: var(--card);
+  border-color: rgba(197, 204, 212, 0.28);
+}
+
+.phone .crm-phone-status em {
+  font-style: normal;
+  margin-left: 6px;
+  color: var(--sand-dim);
+}
+
+.phone .crm-phone-list {
+  margin-top: 8px;
+}
+
+.phone .nfse-field select,
+.phone .nfse-field textarea,
+.phone .nfse-field input,
+.phone .nfse-grid input,
+.phone .nfse-grid select,
+.phone .filter select,
+.phone .filter input {
+  min-height: 44px;
+  font-size: 1rem;
+}
+
+.phone .nfse-step-label {
+  margin: 0;
+  color: var(--sand-dim);
+  font-size: 0.82rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.phone .nfse-step-nav {
+  display: flex;
+  gap: 8px;
+}
+
+.phone .nfse-step-nav .btn {
+  flex: 1;
+  min-height: 48px;
+}
+
+.phone .loc-copy,
+.phone .loc-actions button,
+.phone .loc-nav button {
+  min-height: 48px;
+}

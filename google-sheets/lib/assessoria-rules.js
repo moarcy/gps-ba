@@ -4,7 +4,7 @@ import { normalizeText } from "./excel-utils.js";
 export const CANONICAL_ASSESSORIAS = [
   "A. SAMUEL",
   "A BRAZ",
-  "BELLINATI C6",
+  "BELLINATI PEREZ",
   "BJL",
   "BRUNO VANDERLEI",
   "E ALBUQUERQUE",
@@ -50,10 +50,10 @@ const ASSESSORIA_ALIASES = {
   "j barbosa": "JOÃO BARBOSA",
   "joao barbosa": "JOÃO BARBOSA",
 
-  "b perez": "BELLINATI C6",
-  "bellinati c6": "BELLINATI C6",
-  bellinati: "BELLINATI C6",
-  "bellinati perez": "BELLINATI C6",
+  "b perez": "BELLINATI PEREZ",
+  "bellinati c6": "BELLINATI PEREZ",
+  bellinati: "BELLINATI PEREZ",
+  "bellinati perez": "BELLINATI PEREZ",
 
   "a. samuel": "A. SAMUEL",
   "a samuel": "A. SAMUEL",

@@ -1,8 +1,8 @@
 import { events, sessions, TelegramClient } from "teleproto";
-import { classifyMotivo, matchKeywords } from "./filter.js";
-import { parseAlerta } from "./parse-alerta.js";
+import { catchUpHistory, startCatchUpLoop } from "./catchup.js";
+import { ingestSourceMessage, serializeIngest } from "./ingest.js";
 
-const { NewMessage } = events;
+const { NewMessage, EditedMessage } = events;
 const { StringSession } = sessions;
 
 function asChatId(value) {
@@ -12,74 +12,71 @@ function asChatId(value) {
   return raw;
 }
 
-function messageText(msg) {
-  return String(msg.message || msg.rawText || "").trim();
-}
-
-function mapsFromMessage(msg) {
-  const entities = msg.entities || [];
-  const text = messageText(msg);
-  for (const ent of entities) {
-    const url = ent.url || ent.href;
-    if (url && /maps|goo\.gl/i.test(url)) return url;
-    if (ent.className === "MessageEntityUrl" || ent.offset != null) {
-      const slice = text.slice(ent.offset, ent.offset + (ent.length || 0));
-      if (/https?:\/\/\S*map/i.test(slice)) return slice;
-    }
-  }
-  return "";
-}
-
 export async function startListener({
   apiId,
   apiHash,
   session,
   sourceChatId,
-  keywords,
+  keywords: _keywords,
   store,
   onKeep,
 }) {
   const client = new TelegramClient(new StringSession(session), apiId, apiHash, {
-    connectionRetries: 5,
+    connectionRetries: Infinity,
+    reconnectRetries: Infinity,
+    autoReconnect: true,
   });
 
   await client.connect();
   const me = await client.getMe();
   console.log(`Listener (conta) conectado: ${me.username || me.firstName || me.id}`);
 
+  try {
+    await catchUpHistory({
+      client,
+      store,
+      sourceChatId,
+      onKeep,
+      backfillStored: true,
+    });
+  } catch (err) {
+    console.error("Catch-up falhou (sigo no ao vivo):", err.message || err);
+  }
+
   const source = asChatId(sourceChatId);
   const eventOpts = source ? { chats: [source] } : {};
+  const known = typeof store.knownPlates === "function" ? store.knownPlates() : new Set();
 
-  client.addEventHandler(async (event) => {
+  const onSourceEvent = async (event) => {
     try {
       const msg = event.message;
       if (!msg) return;
-      const text = messageText(msg);
-      if (!text) return;
-
-      const hits = matchKeywords(text, keywords);
-      if (!hits.length) return;
-
-      const alerta = parseAlerta(text, { mapsUrl: mapsFromMessage(msg) });
-      if (!alerta) return;
-
-      const motivos = classifyMotivo(alerta, hits);
-      const { sighting, duplicate } = await store.add(alerta, {
-        motivos,
-        hits,
-        source: "telegram-listener",
-        sourceChatId: String(msg.chatId || ""),
-        messageId: msg.id,
+      await serializeIngest(async () => {
+        await ingestSourceMessage(store, msg, {
+          client,
+          onKeep,
+          known,
+          downloadPhotos: true,
+          source: "telegram-listener",
+        });
+        if (typeof store.setLastSourceMessageId === "function" && msg.id) {
+          await store.setLastSourceMessageId(msg.id);
+        }
       });
-      if (duplicate) return;
-
-      if (typeof onKeep === "function") {
-        await onKeep(sighting, motivos);
-      }
     } catch (err) {
       console.error("Listener:", err);
     }
-  }, new NewMessage(eventOpts));
+  };
+
+  client.addEventHandler(onSourceEvent, new NewMessage(eventOpts));
+  client.addEventHandler(onSourceEvent, new EditedMessage(eventOpts));
+
+  startCatchUpLoop({
+    client,
+    store,
+    sourceChatId,
+    onKeep,
+  });
 
   return client;
 }

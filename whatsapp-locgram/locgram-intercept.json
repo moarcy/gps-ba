@@ -1,0 +1,33 @@
+{
+  "id": "locgram-atendimento",
+  "label": "Locgram Atendimento",
+  "role": "collect-hits-only",
+  "whatsapp": {
+    "pushNameIncludes": ["locgram"],
+    "jidEnv": "EVOLUTION_JID_LOCGRAM",
+    "mustLookLikeOcorrencia": true
+  },
+  "matchText": ["nova ocorrência", "nova ocorrencia"],
+  "parse": "parseLocgramLive",
+  "writeTo": "Localizados",
+  "onHit": "Pendente",
+  "preservePosicao": true,
+  "onePlateLastDate": true,
+  "rondaOrder": "start-to-end",
+  "newestDayFirst": true,
+  "doNotMessageLocator": true,
+  "doNotMarkSimNao": true,
+  "doNotMessageAssessoria": true,
+  "verifyPositionIn": "dashboard-aba-Local",
+  "locators": {
+    "BIRA": "Salvador",
+    "CARLOS": "Salvador",
+    "MACIEL": "Barreiras",
+    "OUTROS": "Outras praças"
+  },
+  "aliases": {
+    "jubiraci": "BIRA",
+    "maciel": "MACIEL",
+    "carlos": "CARLOS"
+  }
+}

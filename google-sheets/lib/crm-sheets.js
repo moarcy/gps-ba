@@ -4,6 +4,8 @@ import {
   CRM_TIMELINE_SHEET,
   DATA_START,
   HEADER_ROW,
+  ILOC_EVENTOS_HEADERS,
+  ILOC_EVENTOS_SHEET,
   PAGAMENTO_CATEGORIAS,
   PAGAMENTO_HEADERS,
   PIPELINE_HEADERS,
@@ -321,6 +323,44 @@ export function upsertPipelineRow(ws, record) {
   })();
   writeRowByHeaders(ws, rowNumber, PIPELINE_HEADERS, pipelineToSheetRow(record));
   return rowNumber;
+}
+
+export function ensureIlocEventosSheet(workbook) {
+  return ensureSheet(workbook, ILOC_EVENTOS_SHEET, ILOC_EVENTOS_HEADERS);
+}
+
+export function listarIlocEventos(ws) {
+  const items = [];
+  if (!ws) return items;
+  for (let r = DATA_START; r <= ws.rowCount; r++) {
+    const raw = readRowByHeaders(ws, r, ILOC_EVENTOS_HEADERS);
+    const id = normalizeText(raw.id);
+    if (!id) continue;
+    items.push({
+      id,
+      ocorridoEm: normalizeText(raw.ocorrido_em),
+      tipo: normalizeText(raw.tipo),
+      placa: normalizePlaca(raw.placa),
+      entrega: normalizeText(raw.entrega),
+      recebidoEm: normalizeText(raw.recebido_em),
+    });
+  }
+  return items;
+}
+
+export function appendIlocEvento(ws, evento) {
+  let last = DATA_START - 1;
+  for (let r = DATA_START; r <= ws.rowCount; r++) {
+    if (cellValue(ws.getCell(r, 1))) last = r;
+  }
+  writeRowByHeaders(ws, last + 1, ILOC_EVENTOS_HEADERS, {
+    id: evento.id,
+    ocorrido_em: evento.ocorridoEm || null,
+    tipo: evento.tipo || "",
+    placa: normalizePlaca(evento.placa),
+    entrega: evento.entrega || "",
+    recebido_em: evento.recebidoEm || new Date().toISOString(),
+  });
 }
 
 export function appendTimelineRow(ws, event) {

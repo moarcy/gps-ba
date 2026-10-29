@@ -87,9 +87,9 @@ export default function NewOcorrenciaSheet({ open, onClose, onCreate }) {
   };
 
   return createPortal(
-    <div className="sheet-root" role="dialog" aria-modal="true" aria-label="Nova ocorrência">
+    <div className="sheet-root sheet-center" role="dialog" aria-modal="true" aria-label="Nova ocorrência">
       <button type="button" className="sheet-backdrop" aria-label="Fechar" onClick={onClose} />
-      <div className="sheet sheet-tall">
+      <div className="sheet">
         <div className="sheet-handle" />
         <div className="sheet-head">
           <h2>Nova ocorrência</h2>
@@ -123,7 +123,7 @@ export default function NewOcorrenciaSheet({ open, onClose, onCreate }) {
                 <label htmlFor="wa-paste">Mensagem</label>
                 <textarea
                   id="wa-paste"
-                  rows={8}
+                  rows={5}
                   value={paste}
                   onChange={(e) => setPaste(e.target.value)}
                   placeholder={"Nova ocorrência\n🚗 PJW2687 - HR-V ..."}

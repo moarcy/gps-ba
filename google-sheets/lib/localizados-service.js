@@ -1,5 +1,5 @@
 import ExcelJS from "exceljs";
-import { downloadExcel, uploadExcel } from "../excel-drive-client.js";
+import { downloadExcel, editarPlanilha } from "../excel-drive-client.js";
 import { normalizePlaca, normalizeText } from "./excel-utils.js";
 import {
   GAP_MINUTES,
@@ -253,28 +253,24 @@ export async function updatePosicao({ placa, posicao, obs } = {}) {
   }
   const obsText = obs === undefined ? undefined : normalizeText(obs);
 
-  const { workbook, localPath } = await loadWorkbook({ useCache: false });
-  const sheets = [LOCALIZADOS_OPS_SHEET, LOTES_SHEET, STATUS_SHEET];
-  let found = false;
-  for (const name of sheets) {
-    if (applyPosicaoOnWorksheet(workbook.getWorksheet(name), plate, next, obsText)) {
-      found = true;
+  return editarPlanilha(gestorId(), async (workbook) => {
+    const sheets = [LOCALIZADOS_OPS_SHEET, LOTES_SHEET, STATUS_SHEET];
+    let found = false;
+    for (const name of sheets) {
+      if (applyPosicaoOnWorksheet(workbook.getWorksheet(name), plate, next, obsText)) {
+        found = true;
+      }
     }
-  }
-  if (!found) {
-    throw Object.assign(new Error(`Placa ${plate} não está na aba Localizados.`), { status: 404 });
-  }
+    if (!found) {
+      throw Object.assign(new Error(`Placa ${plate} não está na aba Localizados.`), { status: 404 });
+    }
 
-  workbook.calcProperties.fullCalcOnLoad = true;
-  await workbook.xlsx.writeFile(localPath);
-  await uploadExcel(gestorId(), localPath);
-
-  const payload = buildPayload(readLocalizadosOps(workbook.getWorksheet(LOCALIZADOS_OPS_SHEET)));
-  cache.payload = payload;
-  cache.loadedAt = Date.now();
-
-  const item = payload.dias.flatMap((d) => d.items).find((it) => it.placa === plate);
-  return { ok: true, placa: plate, posicao: next, obs: item?.obs || obsText || "", item, data: payload };
+    const payload = buildPayload(readLocalizadosOps(workbook.getWorksheet(LOCALIZADOS_OPS_SHEET)));
+    cache.payload = payload;
+    cache.loadedAt = Date.now();
+    const item = payload.dias.flatMap((d) => d.items).find((it) => it.placa === plate);
+    return { ok: true, placa: plate, posicao: next, obs: item?.obs || obsText || "", item, data: payload };
+  });
 }
 
 export async function ingestLocgramHit(body = {}) {
@@ -299,34 +295,30 @@ export async function ingestLocgramHit(body = {}) {
     });
   }
 
-  const { workbook, localPath } = await loadWorkbook({ useCache: false });
-  const ws = workbook.getWorksheet(LOCALIZADOS_OPS_SHEET);
-  if (!ws) {
-    throw Object.assign(
-      new Error("Aba Localizados ainda não existe. Rode npm run localizados:status."),
-      { status: 404, code: "NO_SHEET" },
-    );
-  }
+  return editarPlanilha(gestorId(), async (workbook) => {
+    const ws = workbook.getWorksheet(LOCALIZADOS_OPS_SHEET);
+    if (!ws) {
+      throw Object.assign(
+        new Error("Aba Localizados ainda não existe. Rode npm run localizados:status."),
+        { status: 404, code: "NO_SHEET" },
+      );
+    }
 
-  const result = upsertLocalizadosOpsRow(ws, parsed);
-  if (!result.ok) {
-    throw Object.assign(new Error("Falha ao gravar na aba Localizados."), { status: 500 });
-  }
-  if (result.skipped) {
-    return { ok: true, ...result };
-  }
+    const result = upsertLocalizadosOpsRow(ws, parsed);
+    if (!result.ok) {
+      throw Object.assign(new Error("Falha ao gravar na aba Localizados."), { status: 500 });
+    }
+    if (result.skipped) {
+      return { skipUpload: true, value: { ok: true, ...result } };
+    }
 
-  workbook.calcProperties.fullCalcOnLoad = true;
-  await workbook.xlsx.writeFile(localPath);
-  await uploadExcel(gestorId(), localPath);
-
-  const payload = buildPayload(readLocalizadosOps(ws));
-  cache.payload = payload;
-  cache.loadedAt = Date.now();
-
-  return {
-    ok: true,
-    ...result,
-    item: payload.dias.flatMap((d) => d.items).find((it) => it.placa === result.placa) || null,
-  };
+    const payload = buildPayload(readLocalizadosOps(ws));
+    cache.payload = payload;
+    cache.loadedAt = Date.now();
+    return {
+      ok: true,
+      ...result,
+      item: payload.dias.flatMap((d) => d.items).find((it) => it.placa === result.placa) || null,
+    };
+  });
 }

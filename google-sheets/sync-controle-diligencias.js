@@ -23,8 +23,10 @@ import {
   applySaldoConditionalFormatting,
   buildControleSheetLayout,
   buildFechamentosSheetLayout,
+  DATA_COLUMNS,
   DATA_START,
   HEADER_ROW,
+  TITLE_ROW,
   styleControleClosingRow,
   styleControleDataRow,
   trimRowsAfter,
@@ -293,18 +295,30 @@ export function writeControleSheet(worksheet, records) {
         row.getCell(col).value = null;
       }
     }
+    row.getCell(14).value = null;
 
     // Imposto só com prêmio. Apoio/Loc/Guincho são sempre despesas (com ou sem prêmio).
     // Saldo = N(Prêmio) − despesas − N(Imposto); fica negativo se só houver despesas.
-    applyVehicleCalcFormulas(row, rowNumber);
+    applyVehicleCalcFormulas(row, rowNumber, { headerRow: HEADER_ROW });
     styleControleDataRow(row, rowNumber, { zebra: i % 2 === 1 });
     row.commit();
   }
 
   trimRowsAfter(worksheet, dataEnd);
   applySaldoConditionalFormatting(worksheet, dataEnd);
-  applyControleDataTable(worksheet, dataEnd);
+  const lastUsed = DATA_START + Math.max(records.length, 1) - 1;
+  const filterEnd = Math.min(dataEnd, Math.max(lastUsed + 8, DATA_START));
+  applyControleDataTable(worksheet, filterEnd);
   applyControleListValidations(worksheet, dataEnd);
+
+  // Título/cabeçalho não podem herdar formato de data (Google Sheets vira #VALUE!).
+  worksheet.getCell(TITLE_ROW, 1).numFmt = "General";
+  for (let col = 1; col <= DATA_COLUMNS; col++) {
+    const headerCell = worksheet.getCell(HEADER_ROW, col);
+    if (![7, 9, 10, 11, 12, 13].includes(col)) {
+      headerCell.numFmt = "General";
+    }
+  }
 }
 
 /**

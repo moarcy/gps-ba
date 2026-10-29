@@ -1,0 +1,14 @@
+{
+  "name": "gps-ba-nfse-worker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "install:browsers": "npx playwright install chromium"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "playwright": "^1.52.0"
+  }
+}

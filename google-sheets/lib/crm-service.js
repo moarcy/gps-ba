@@ -29,7 +29,7 @@ import {
   normalizePatio,
   resolvePatio,
 } from "./patio-rules.js";
-import { downloadExcel, uploadExcel } from "../excel-drive-client.js";
+import { descartarArquivo, downloadExcel, editarPlanilha, uploadExcel } from "../excel-drive-client.js";
 import { readGestorRecords } from "../sync-controle-diligencias.js";
 
 function todayIso() {
@@ -50,29 +50,36 @@ function sortByPriority(a, b) {
   return a.placa.localeCompare(b.placa);
 }
 
+/** Fila do kanban: caso mais recente primeiro. */
+function sortFilaDesc(a, b) {
+  const da = a.dataOcorrencia || "";
+  const db = b.dataOcorrencia || "";
+  if (da !== db) return db.localeCompare(da);
+  const ua = a.atualizadoEm || "";
+  const ub = b.atualizadoEm || "";
+  if (ua !== ub) return ub.localeCompare(ua);
+  return a.placa.localeCompare(b.placa);
+}
+
 async function withGestorWorkbook(mutator) {
   const gestorId = process.env.SPREADSHEET_ID_1?.trim();
   if (!gestorId) throw Object.assign(new Error("SPREADSHEET_ID_1 não configurado."), { status: 500 });
 
-  const localPath = await downloadExcel(gestorId, { useCache: false });
-  const workbook = new ExcelJS.Workbook();
-  await workbook.xlsx.readFile(localPath);
-  const sheets = ensureCrmSheets(workbook);
-
-  const result = await mutator(workbook, sheets);
-
-  workbook.calcProperties.fullCalcOnLoad = true;
-  await workbook.xlsx.writeFile(localPath);
-  await uploadExcel(gestorId, localPath);
-  return result;
+  return editarPlanilha(gestorId, async (workbook) => {
+    const sheets = ensureCrmSheets(workbook);
+    return mutator(workbook, sheets);
+  });
 }
 
 async function loadCrmSnapshot({ persistIfCreated = true, enrichFromControle = true } = {}) {
   const gestorId = process.env.SPREADSHEET_ID_1?.trim();
   if (!gestorId) throw Object.assign(new Error("SPREADSHEET_ID_1 não configurado."), { status: 500 });
 
-  const localPath = await downloadExcel(gestorId, { useCache: false });
+  const baixado = await downloadExcel(gestorId, { versioned: true });
+  const localPath = baixado.localPath;
+  const etag = baixado.etag;
   const workbook = new ExcelJS.Workbook();
+  try {
   await workbook.xlsx.readFile(localPath);
 
   const hadPipeline = Boolean(workbook.getWorksheet("CRM Pipeline"));
@@ -92,25 +99,27 @@ async function loadCrmSnapshot({ persistIfCreated = true, enrichFromControle = t
     dirtyRows = enriched.changed;
   }
 
-  if ((created || dirtyRows.length) && persistIfCreated) {
-    try {
-      for (const item of dirtyRows) {
-        upsertPipelineRow(sheets.pipeline, item);
+    if ((created || dirtyRows.length) && persistIfCreated) {
+      try {
+        for (const item of dirtyRows) {
+          upsertPipelineRow(sheets.pipeline, item);
+        }
+        workbook.calcProperties.fullCalcOnLoad = true;
+        await workbook.xlsx.writeFile(localPath);
+        await uploadExcel(gestorId, localPath, { etag });
+      } catch (err) {
+        console.error("Falha ao persistir sync CRM←Controle:", err.message || err);
       }
-      workbook.calcProperties.fullCalcOnLoad = true;
-      await workbook.xlsx.writeFile(localPath);
-      await uploadExcel(gestorId, localPath);
-    } catch (err) {
-      console.error("Falha ao persistir sync CRM←Controle:", err.message || err);
-      // Continua com payload em memória para a UI não ficar vazia
     }
-  }
 
-  return {
-    pipeline,
-    timeline: readTimeline(sheets.timeline),
-    pagamentos: readPagamentos(sheets.pagamentos),
-  };
+    return {
+      pipeline,
+      timeline: readTimeline(sheets.timeline),
+      pagamentos: readPagamentos(sheets.pagamentos),
+    };
+  } finally {
+    descartarArquivo(localPath);
+  }
 }
 
 /**
@@ -236,7 +245,7 @@ function enrichPipelineFromControle(pipeline, controleMap) {
 
 function buildCrmPayload(snapshot) {
   const today = todayIso();
-  const pipeline = [...snapshot.pipeline].sort(sortByPriority);
+  const pipeline = [...snapshot.pipeline].sort(sortFilaDesc);
   const byStatus = {};
   for (const s of CRM_STATUSES) byStatus[s] = [];
   for (const item of pipeline) {

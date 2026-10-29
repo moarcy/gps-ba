@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 async function crmFetch(options = {}) {
   const res = await fetch("/api/crm", options);
@@ -24,21 +24,43 @@ export function useCrm({ enabled = true } = {}) {
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
 
+  const flight = useRef(0);
   const load = useCallback(async ({ silent = false } = {}) => {
-    if (!silent) setLoading(true);
-    setError(null);
+    const mine = ++flight.current;
+    if (!silent) {
+      setLoading(true);
+      setError(null);
+    }
     try {
       const json = await crmFetch();
+      if (mine !== flight.current) return json;
       setData(json);
+      if (!silent) setError(null);
+      return json;
     } catch (err) {
-      setError(err.message || "Falha ao carregar CRM");
+      if (mine === flight.current && !silent) setError(err.message || "Falha ao carregar CRM");
+      return null;
     } finally {
-      if (!silent) setLoading(false);
+      if (mine === flight.current && !silent) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
     if (enabled) load();
+  }, [enabled, load]);
+
+  useEffect(() => {
+    if (!enabled) return undefined;
+    const tick = () => {
+      if (document.visibilityState !== "visible") return;
+      load({ silent: true });
+    };
+    const id = setInterval(tick, 60000);
+    document.addEventListener("visibilitychange", tick);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", tick);
+    };
   }, [enabled, load]);
 
   const runAction = useCallback(

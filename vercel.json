@@ -26,6 +26,10 @@
     "api/localizados.js": {
       "memory": 1024,
       "maxDuration": 60
+    },
+    "api/webhooks/iloc.js": {
+      "memory": 1024,
+      "maxDuration": 60
     }
   }
 }

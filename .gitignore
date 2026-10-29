@@ -17,6 +17,8 @@ google-sheets/credentials.json
 google-sheets/service-account.json
 google-sheets/token.json
 google-sheets/.cache/
+google-sheets/data/iloc-events.jsonl
+google-sheets/data/iloc-events.seen
 google-sheets/nfse-worker/screenshots/
 **/credentials.json
 **/*.pem
@@ -54,3 +56,6 @@ Documentos*/
 CONTROLE*/
 VISTORIA*/
 producao_gpsba*
+
+.vercel
+.env*

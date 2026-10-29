@@ -1,11 +1,12 @@
-import { DATE_FMT } from "./excel-utils.js";
+import { CURRENCY_FMT, DATE_FMT } from "./excel-utils.js";
 
 export const TITLE_ROW = 1;
 export const HEADER_ROW = 2;
 export const DATA_START = 3;
 export const DATA_COLUMNS = 13;
+/** Coluna oculta: data serial (aceita 05092026 na coluna A). */
+export const DATE_HELPER_COL = 14;
 
-const CURRENCY_FMT = '"R$" #,##0.00';
 const CURRENCY_COLS = [7, 9, 10, 11, 12, 13];
 const DESPESAS_COLS = [9, 10, 11, 12];
 
@@ -91,6 +92,7 @@ function paintCell(cell, { bg, text, size = 11, bold = false }) {
   cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: bg } };
   cell.alignment = { vertical: "middle", horizontal: "center" };
   cell.border = thinBorder("FF9CA3AF");
+  cell.numFmt = "General";
 }
 
 export function clearControleTables(worksheet) {
@@ -144,14 +146,23 @@ export function buildControleSheetLayout(worksheet) {
     worksheet.getColumn(Number(col)).width = width;
   }
 
+  const helperCol = worksheet.getColumn(DATE_HELPER_COL);
+  helperCol.hidden = false;
+  helperCol.width = 3;
+
   worksheet.pageSetup = {
+    paperSize: 9,
     orientation: "landscape",
-    fitToPage: true,
+    fitToPage: false,
+    scale: 100,
+    horizontalDpi: 96,
+    verticalDpi: 96,
+    usePrinterDefaults: true,
     fitToWidth: 1,
-    fitToHeight: 0,
+    fitToHeight: 1,
     margins: {
-      left: 0.4,
-      right: 0.4,
+      left: 0.5,
+      right: 0.5,
       top: 0.5,
       bottom: 0.5,
       header: 0.2,
@@ -166,7 +177,7 @@ export function buildControleSheetLayout(worksheet) {
       ySplit: HEADER_ROW,
       topLeftCell: `A${DATA_START}`,
       activeCell: `A${DATA_START}`,
-      zoomScale: 115,
+      zoomScale: 100,
     },
   ];
 }
@@ -176,10 +187,12 @@ function saldoFontColor(value) {
   return Number(value) < 0 ? COLORS.saldoNegative : COLORS.saldoText;
 }
 
-export function styleControleDataRow(row, rowNumber, { zebra = false } = {}) {
+export function styleControleDataRow(row, _rowNumber, { zebra: _zebra = false } = {}) {
   row.height = 22;
-  const bg = zebra ? COLORS.zebra : "FFFFFFFF";
 
+  // Sem fill/borda nas linhas de dados: no Google Sheets (arquivo .xlsx + tema
+  // escuro) fundo branco + grade vira um bloco claro "fora da tabela". As 9
+  // linhas novas do topo já entram sem borda; o restante antigo ficava branco.
   for (let col = 1; col <= DATA_COLUMNS; col++) {
     const cell = row.getCell(col);
     const isCurrency = CURRENCY_COLS.includes(col);
@@ -198,8 +211,13 @@ export function styleControleDataRow(row, rowNumber, { zebra = false } = {}) {
       },
       bold: col === 13 || isDespesa,
     };
-    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: bg } };
-    cell.border = thinBorder();
+    cell.fill = { type: "pattern", pattern: "none" };
+    cell.border = {
+      top: { style: "none" },
+      left: { style: "none" },
+      bottom: { style: "none" },
+      right: { style: "none" },
+    };
     cell.alignment = { vertical: "middle", horizontal: "center", wrapText: false };
 
     if (isCurrency) cell.numFmt = CURRENCY_FMT;
@@ -348,52 +366,13 @@ export function applyControleAutoFilter(worksheet, lastDataRow) {
 }
 
 /**
- * Tabela Excel sobre cabeçalho + slots de dados.
- * Linhas novas inseridas dentro da tabela herdam fórmulas de Imposto/Saldo.
+ * Filtro no cabeçalho (setas de Loc / Banco / Assessoria).
+ * Não usa Excel Table: TableStyleMedium2 pinta fundo claro e, no Google Sheets,
+ * o intervalo da tabela não acompanha linhas inseridas no topo.
  */
 export function applyControleDataTable(worksheet, lastDataRow) {
   if (lastDataRow < DATA_START) return;
 
   clearControleTables(worksheet);
-  worksheet.autoFilter = undefined;
-
-  const rows = [];
-  for (let r = DATA_START; r <= lastDataRow; r++) {
-    const values = [];
-    for (let c = 1; c <= DATA_COLUMNS; c++) {
-      values.push(worksheet.getCell(r, c).value);
-    }
-    rows.push(values);
-  }
-
-  worksheet.addTable({
-    name: CONTROLE_TABLE_NAME,
-    displayName: CONTROLE_TABLE_NAME,
-    ref: `A${HEADER_ROW}:${colLetter(DATA_COLUMNS)}${lastDataRow}`,
-    headerRow: true,
-    totalsRow: false,
-    style: {
-      theme: "TableStyleMedium2",
-      showRowStripes: false,
-    },
-    columns: HEADERS.map((name) => ({
-      name,
-      filterButton: true,
-    })),
-    rows,
-  });
-
-  // Reforça setas de filtro (Assessoria etc.) em clientes que ignoram filterButton da tabela.
   applyControleAutoFilter(worksheet, lastDataRow);
-}
-
-function colLetter(col) {
-  let n = col;
-  let s = "";
-  while (n > 0) {
-    const r = (n - 1) % 26;
-    s = String.fromCharCode(65 + r) + s;
-    n = Math.floor((n - 1) / 26);
-  }
-  return s;
 }

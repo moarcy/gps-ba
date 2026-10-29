@@ -28,6 +28,8 @@ export default function NfsePanel({
   saving,
   onReload,
   runAction,
+  searchQuery = "",
+  phone = false,
 }) {
   const tomadores = data?.tomadores || [];
   const servicos = data?.servicos || [];
@@ -46,6 +48,33 @@ export default function NfsePanel({
   const [tomadorForm, setTomadorForm] = useState(EMPTY_TOMADOR);
   const [localMsg, setLocalMsg] = useState("");
   const [localErr, setLocalErr] = useState("");
+  const [step, setStep] = useState(0);
+
+  const qNorm = searchQuery.trim().toUpperCase();
+  const tomadoresVisiveis = useMemo(() => {
+    if (!qNorm) return tomadores;
+    const matched = tomadores.filter((t) =>
+      [t.razaoSocial, t.documento, t.municipio]
+        .filter(Boolean)
+        .join(" ")
+        .toUpperCase()
+        .includes(qNorm),
+    );
+    const current = tomadores.find((t) => t.id === tomadorId || t.documento === tomadorId);
+    if (current && !matched.some((t) => t.id === current.id)) return [current, ...matched];
+    return matched;
+  }, [tomadores, qNorm, tomadorId]);
+
+  const emitidasVisiveis = useMemo(() => {
+    if (!qNorm) return emitidas;
+    return emitidas.filter((e) =>
+      [e.numeroNf, e.tomadorNome, e.tomadorId, e.servicoCodigo, e.status, e.erro]
+        .filter(Boolean)
+        .join(" ")
+        .toUpperCase()
+        .includes(qNorm),
+    );
+  }, [emitidas, qNorm]);
 
   useEffect(() => {
     if (!servicoCodigo && servicos[0]?.codigo) {
@@ -165,12 +194,35 @@ export default function NfsePanel({
     }
   };
 
+  const goNext = () => {
+    if (step === 0 && !tomadorId) {
+      setLocalErr("Selecione um tomador.");
+      return;
+    }
+    if (step === 1 && (!servicoCodigo || !descricao.trim())) {
+      setLocalErr("Selecione o serviço e a descrição.");
+      return;
+    }
+    setLocalErr("");
+    setStep((s) => Math.min(2, s + 1));
+  };
+
+  const onSubmit = (event) => {
+    if (phone && step < 2) {
+      event.preventDefault();
+      goNext();
+      return;
+    }
+    emit(event);
+  };
+
   if (loading && !data) {
     return <div className="empty-state">Carregando NFS-e…</div>;
   }
 
   return (
     <div className="nfse-panel">
+      {!phone && (
       <div className="nfse-head">
         <div>
           <h2>Emissão NFS-e</h2>
@@ -183,6 +235,7 @@ export default function NfsePanel({
           Atualizar
         </button>
       </div>
+      )}
 
       {(error || localErr) && <div className="nfse-banner nfse-banner-error">{localErr || error}</div>}
       {localMsg && <div className="nfse-banner nfse-banner-ok">{localMsg}</div>}
@@ -193,7 +246,10 @@ export default function NfsePanel({
         </div>
       )}
 
-      <form className="nfse-form" onSubmit={emit}>
+      <form className="nfse-form" onSubmit={onSubmit}>
+        {phone && <p className="nfse-step-label">{["Tomador", "Serviço", "Emitir"][step]} · {step + 1} de 3</p>}
+        {(!phone || step === 0) && (
+        <>
         <label className="nfse-field">
           <span>Tomador</span>
           <div className="nfse-row">
@@ -203,7 +259,7 @@ export default function NfsePanel({
               required
             >
               <option value="">Selecione…</option>
-              {tomadores.map((t) => (
+              {tomadoresVisiveis.map((t) => (
                 <option key={t.id} value={t.id}>
                   {t.razaoSocial || t.documento} ({t.documento})
                 </option>
@@ -331,7 +387,11 @@ export default function NfsePanel({
             </div>
           </div>
         )}
+        </>
+        )}
 
+        {(!phone || step === 1) && (
+        <>
         <label className="nfse-field">
           <span>Serviço</span>
           <select
@@ -400,10 +460,14 @@ export default function NfsePanel({
             value={descricao}
             onChange={(e) => setDescricao(e.target.value)}
             placeholder="ESTADIAS REFERENTE AO VEICULO - [MODELO] - PLACA: …"
-            required
-          />
+          required
+        />
         </label>
+        </>
+        )}
 
+        {(!phone || step === 2) && (
+        <>
         <div className="nfse-card">
           <h3>Preview dos itens</h3>
           <div className="nfse-items">
@@ -439,13 +503,37 @@ export default function NfsePanel({
             {saving ? "Emitindo…" : dryRun ? "Testar preenchimento" : "Emitir NFS-e"}
           </button>
         </div>
+        </>
+        )}
+        {phone && (
+          <div className="nfse-step-nav">
+            {step > 0 && (
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => {
+                  setLocalErr("");
+                  setStep((s) => Math.max(0, s - 1));
+                }}
+              >
+                Voltar
+              </button>
+            )}
+            {step < 2 && (
+              <button type="button" className="btn btn-primary" onClick={goNext}>
+                Continuar
+              </button>
+            )}
+          </div>
+        )}
       </form>
 
+      {(!phone || step === 2) && (
       <section className="nfse-history">
         <h3>Últimas emissões</h3>
-        {!emitidas.length && <p className="nfse-hint">Nenhuma emissão ainda.</p>}
+        {!emitidasVisiveis.length && <p className="nfse-hint">Nenhuma emissão ainda.</p>}
         <div className="nfse-history-list">
-          {emitidas.map((e) => (
+          {emitidasVisiveis.map((e) => (
             <article key={e.id} className="nfse-history-item">
               <div className="nfse-item-top">
                 <strong>
@@ -464,6 +552,7 @@ export default function NfsePanel({
           ))}
         </div>
       </section>
+      )}
     </div>
   );
 }

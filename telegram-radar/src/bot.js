@@ -1,15 +1,16 @@
-import { Bot, GrammyError, HttpError } from "grammy";
+import { InputFile, Bot, GrammyError, HttpError } from "grammy";
 import {
   formatCameras,
   formatHeatmap,
   formatHot,
   formatOverview,
   formatPlate,
+  formatRoutes,
   hotNow,
   overview,
   plateStats,
 } from "./analytics.js";
-import { classifyMotivo, matchKeywords, parseKeywords } from "./filter.js";
+import { classifyMotivo, decideTrack, parseKeywords } from "./filter.js";
 import { formatAlertHtml } from "./format.js";
 import { isBlacklistAlert, normalizePlaca, parseAlerta, splitAlerts } from "./parse-alerta.js";
 
@@ -23,27 +24,45 @@ function extractMapsUrl(ctx) {
   return "";
 }
 
+function photoFileId(ctx) {
+  const photos = ctx.message?.photo;
+  if (!photos?.length) return null;
+  return photos[photos.length - 1].file_id;
+}
+
 function helpText(keywords) {
   return [
     `Radar de apreensão`,
     `Filtro: ${keywords.join("  |  ")}`,
     ``,
-    `Eu só deixo passar alerta de blacklist com Endrigo (carteira) ou Feira de Santana (praça).`,
+    `Eu aviso no Telegram todo alerta com Feira de Santana na câmera:`,
+    `GO = origem Feira (já na praça). sentido Feira = vindo para a praça.`,
     ``,
-    `/hoje — resumo e janelas`,
-    `/quente — placas das últimas 2h`,
-    `/placa ABC1D23 — padrão da placa`,
+    `/hoje — relógio da praça, hops úteis e quente`,
+    `/quente — origem Feira nas últimas 2h`,
+    `/placa ABC1D23 — como agir, ETA e recorrência`,
     `/horarios — mapa dia × hora`,
-    `/cameras — corredores mais quentes`,
+    `/rotas — corredores mais quentes`,
+    `/cameras — câmeras`,
     `/chatid — id deste chat (para o .env)`,
     ``,
-    `Encaminhe um alerta para cá se quiser testar o filtro agora.`,
+    `Encaminhe um alerta de Feira para testar. Outras câmeras só gravamos se a placa já passou em Feira.`,
+    `Se o PC dormir ou desligar, ao voltar eu puxo o que ficou no Painel RK (aviso até 18h).`,
   ].join("\n");
 }
 
-export function createRadarBot({ token, store, keywords }) {
+export function createRadarBot({ token, store, keywords, destChatId }) {
   const bot = new Bot(token);
   const keys = parseKeywords(keywords.join(","));
+
+  function resolveDest() {
+    return destChatId || store.getSettings().destChatId || null;
+  }
+
+  function sameChat(a, b) {
+    if (a == null || b == null) return false;
+    return String(a) === String(b);
+  }
 
   async function requireData(ctx) {
     const rows = store.all();
@@ -56,7 +75,7 @@ export function createRadarBot({ token, store, keywords }) {
 
   bot.command("start", async (ctx) => {
     await store.addAdmin(ctx.from.id);
-    if (ctx.chat.type === "private") {
+    if (ctx.chat.type === "private" && !destChatId) {
       await store.setDestChatId(ctx.chat.id);
     }
     await ctx.reply(helpText(keys));
@@ -87,6 +106,18 @@ export function createRadarBot({ token, store, keywords }) {
     await ctx.reply(formatCameras(overview(rows)));
   });
 
+  bot.command("rotas", async (ctx) => {
+    const rows = await requireData(ctx);
+    if (!rows) return;
+    const placa = normalizePlaca(ctx.match);
+    if (placa) {
+      const stats = plateStats(rows, placa);
+      if (!stats) return ctx.reply(`Sem passagens de ${placa}.`);
+      return ctx.reply(formatRoutes(stats, `${placa} · rotas`));
+    }
+    await ctx.reply(formatRoutes(overview(rows), "Corredores para interceptação"));
+  });
+
   bot.command("horarios", async (ctx) => {
     const rows = await requireData(ctx);
     if (!rows) return;
@@ -108,35 +139,60 @@ export function createRadarBot({ token, store, keywords }) {
 
   async function ingestText(ctx, text) {
     const mapsUrl = extractMapsUrl(ctx);
+    const media = { photoFileId: photoFileId(ctx) };
     const chunks = isBlacklistAlert(text) ? splitAlerts(text) : [];
     const parsed = chunks.length ? chunks : [parseAlerta(text, { mapsUrl })].filter(Boolean);
     if (!parsed.length) return false;
 
     let kept = 0;
     let skipped = 0;
+    let tracked = 0;
+    const known = typeof store.knownPlates === "function" ? store.knownPlates() : new Set();
     for (const alerta of parsed) {
       if (mapsUrl && !alerta.mapsUrl) alerta.mapsUrl = mapsUrl;
-      const hits = matchKeywords(alerta.raw, keys);
-      if (!hits.length) {
+      const { track, notify } = decideTrack(alerta, { knownPlates: known });
+      if (!track) {
         skipped += 1;
         continue;
       }
-      const motivos = classifyMotivo(alerta, hits);
+      const motivos = notify
+        ? classifyMotivo(alerta, ["FEIRA DE SANTANA"])
+        : ["rota"];
+      const dest = resolveDest();
       const { duplicate } = await store.add(alerta, {
         motivos,
-        hits,
+        hits: notify ? ["FEIRA DE SANTANA"] : [],
         source: "telegram-bot",
       });
-      if (duplicate) continue;
-      kept += 1;
-      await ctx.reply(formatAlertHtml(alerta, motivos), {
-        parse_mode: "HTML",
-        link_preview_options: { is_disabled: false },
-      });
+      if (!duplicate) known.add(alerta.placa);
+      if (!notify) {
+        if (!duplicate) tracked += 1;
+        continue;
+      }
+      if (!duplicate) kept += 1;
+      else if (!dest || sameChat(dest, ctx.chat.id)) continue;
+
+      if (!duplicate) {
+        await replyAlert(ctx, alerta, motivos, media);
+      }
+
+      if (dest && !sameChat(dest, ctx.chat.id)) {
+        try {
+          await notifyDest(bot, dest, alerta, motivos, media);
+          if (duplicate) {
+            await ctx.reply(`Já estava no radar. Reenviei ${alerta.placa} no grupo.`);
+          }
+        } catch (err) {
+          console.error("Falha ao enviar no grupo destino:", err.message || err);
+          await ctx.reply("Filtrado aqui, mas não consegui mandar no grupo. Confira se o bot ainda é membro.");
+        }
+      }
     }
 
-    if (!kept && skipped && parsed.length) {
-      await ctx.reply("Fora do filtro (não é Endrigo nem Feira de Santana). Descartei.");
+    if (!kept && tracked && parsed.length) {
+      await ctx.reply("Gravei a rota desta placa (já passou em Feira). Sem GO — câmera fora da praça.");
+    } else if (!kept && skipped && parsed.length) {
+      await ctx.reply("Fora de Feira de Santana e placa ainda não está no radar. Descartei.");
     }
     return true;
   }
@@ -148,9 +204,8 @@ export function createRadarBot({ token, store, keywords }) {
     if (!handled) return next();
   });
 
-  bot.on("message:caption", async (ctx) => {
-    const text = ctx.message.caption || "";
-    await ingestText(ctx, text);
+  bot.on("message:photo", async (ctx) => {
+    await ingestText(ctx, ctx.message.caption || "");
   });
 
   bot.catch((err) => {
@@ -167,9 +222,47 @@ export function createRadarBot({ token, store, keywords }) {
   return bot;
 }
 
-export async function notifyDest(bot, destChatId, alerta, motivos) {
+function photoPayload(media = {}) {
+  if (media.photoFileId) return media.photoFileId;
+  if (media.photoBuffer) {
+    return new InputFile(media.photoBuffer, "radar.jpg");
+  }
+  return null;
+}
+
+async function replyAlert(ctx, alerta, motivos, media = {}) {
+  const caption = formatAlertHtml(alerta, motivos);
+  const photo = photoPayload(media);
+  if (photo) {
+    await ctx.replyWithPhoto(photo, {
+      caption: clipCaption(caption),
+      parse_mode: "HTML",
+    });
+    return;
+  }
+  await ctx.reply(caption, {
+    parse_mode: "HTML",
+    link_preview_options: { is_disabled: false },
+  });
+}
+
+function clipCaption(html) {
+  if (html.length <= 1024) return html;
+  return `${html.slice(0, 1000)}…`;
+}
+
+export async function notifyDest(bot, destChatId, alerta, motivos, media = {}) {
   if (!destChatId) return;
-  await bot.api.sendMessage(destChatId, formatAlertHtml(alerta, motivos), {
+  const caption = formatAlertHtml(alerta, motivos);
+  const photo = photoPayload(media);
+  if (photo) {
+    await bot.api.sendPhoto(destChatId, photo, {
+      caption: clipCaption(caption),
+      parse_mode: "HTML",
+    });
+    return;
+  }
+  await bot.api.sendMessage(destChatId, caption, {
     parse_mode: "HTML",
     link_preview_options: { is_disabled: false },
   });

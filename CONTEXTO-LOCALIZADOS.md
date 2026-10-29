@@ -59,15 +59,34 @@ Planilha: https://docs.google.com/spreadsheets/d/1QBcAEqK9MNbP4DiqN4rhPAm-rUXQlh
 - `google-sheets/lib/localizados-status.js` — cruza ZIP + listas + CRM.
 - `google-sheets/lib/localizador-lotes.js` — datas, lotes, checklist.
 - `google-sheets/push-localizados-status.js` — sobe as abas.
+- `whatsapp-locgram/` — interceptação ao vivo (Evolution).
 
 Na aba **Local** do app: escolhe Bira / Carlos / Maciel, copia o Zap **do dia inteiro**, marca **Sim** ou **Não**. A Evolution **não** fala com o loc — só coleta a batida.
 
-Worker: `whatsapp-locgram/` (notebook, igual o Telegram). Webhook `http://127.0.0.1:8790/webhook`.
-
-- `GET /api/localizados` — lotes e checklist
+- `GET /api/localizados` — dias e checklist
 - `POST /api/localizados` — `{ placa, posicao: "Pendente"|"Sim"|"Não" }`
 
-Regenerar (na pasta `google-sheets`):
+## Locgram ao vivo (Evolution neste notebook)
+
+Igual o Radar Telegram: o PC fica ligado e coleta. **Não vai para a Vercel.**
+
+1. Locgram manda *Nova ocorrência* no WhatsApp.
+2. Evolution chama `http://127.0.0.1:8790/webhook`.
+3. Worker grava a placa na aba **Localizados** (Pendente).
+4. Você organiza na aba **Local** do app — copiar Zap do dia, marcar Sim/Não.
+
+Config pronta para reaproveitar:
+
+- Perfil: `whatsapp-locgram/locgram-intercept.json`
+- Briefing: `whatsapp-locgram/AGENT-LOCGRAM.md`
+- Skill Cursor: `.cursor/skills/locgram-evolution/SKILL.md`
+- Setup: `whatsapp-locgram/configure-locgram.ps1` (`.env` + achar chat Locgram + registrar webhook + autostart)
+
+Porta **8790** = Locgram. Porta **8080** = Telegram Radar. Não misturar.
+
+A Evolution precisa estar ligada neste PC (`EVOLUTION_API_URL`, `EVOLUTION_API_KEY`, `EVOLUTION_INSTANCE` em `whatsapp-locgram/.env`). Se ela estiver em Docker: `EVOLUTION_WEBHOOK_URL=http://host.docker.internal:8790/webhook`.
+
+Regenerar histórico (na pasta `google-sheets`):
 
 ```
 npm run localizados:status
@@ -86,3 +105,4 @@ Preserva Posição? e Obs. Precisa do ZIP na raiz do projeto e de `google-sheets
 2. Mandar o dia inteiro no Zap para Bira, Carlos ou Maciel.
 3. Marcar Sim/Não conforme a resposta.
 4. Quando houver Sim, montar mensagem só desses para a assessoria.
+5. Locgram ao vivo: preencher `whatsapp-locgram/.env` e rodar `configure-locgram.ps1` quando a Evolution estiver ligada.

@@ -13,11 +13,15 @@ import AddVehicleSheet from "./AddVehicleSheet";
 import CrmPanel from "./crm/CrmPanel";
 import { useCrm } from "./hooks/useCrm";
 import { useDashboard } from "./hooks/useDashboard";
+import { useIsMobile } from "./hooks/useIsMobile";
 import { useLocalizados } from "./hooks/useLocalizados";
 import { useNfse } from "./hooks/useNfse";
+import { useRadar } from "./hooks/useRadar";
 import { formatBRL, formatDate } from "./lib/format";
+import MobileApp from "./mobile/MobileApp";
 import LocalizadosPanel from "./localizados/LocalizadosPanel";
 import NfsePanel from "./nfse/NfsePanel";
+import RadarPanel from "./radar/RadarPanel";
 import "./index.css";
 
 const CHART_PALETTE = ["#5b8def", "#4aa3a0", "#c4a35a", "#8b7ec8", "#6f9b84", "#b87a7a"];
@@ -237,12 +241,25 @@ function IconLocal() {
   );
 }
 
+function IconFeira() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        fill="currentColor"
+        d="M12 3.2a8.8 8.8 0 1 0 0 17.6 8.8 8.8 0 0 0 0-17.6Zm0 2.2a6.6 6.6 0 1 1 0 13.2 6.6 6.6 0 0 1 0-13.2Zm0 2.6a4 4 0 1 0 0 8 4 4 0 0 0 0-8Zm0 2.2a1.8 1.8 0 1 1 0 3.6 1.8 1.8 0 0 1 0-3.6Z"
+      />
+    </svg>
+  );
+}
+
 export default function App() {
+  const isMobile = useIsMobile();
   const { data, loading, error, reload } = useDashboard();
   const [tab, setTab] = useState("resumo");
-  const crm = useCrm({ enabled: tab === "crm" });
+  const crm = useCrm({ enabled: tab === "crm" || tab === "calendario" || tab === "feira" });
   const nfse = useNfse({ enabled: tab === "nfse" });
   const localizados = useLocalizados({ enabled: tab === "local" });
+  const radar = useRadar({ enabled: tab === "feira" });
   const [month, setMonth] = useState("all");
   const [assessoria, setAssessoria] = useState("all");
   const [loc1, setLoc1] = useState("all");
@@ -258,6 +275,14 @@ export default function App() {
       document.body.style.overflow = "";
     };
   }, [filtersOpen, addOpen]);
+
+  const crmByPlaca = useMemo(() => {
+    const map = {};
+    for (const item of crm.data?.pipeline || []) {
+      if (item?.placa) map[item.placa] = item;
+    }
+    return map;
+  }, [crm.data]);
 
   const baseFiltered = useMemo(() => {
     if (!data?.vehicles) return [];
@@ -358,7 +383,48 @@ export default function App() {
 
   const alertCount = otherAlerts.length;
 
-  if (loading && !data) {
+  if (isMobile) {
+    return (
+      <MobileApp
+        tab={tab}
+        setTab={setTab}
+        q={q}
+        setQ={setQ}
+        month={month}
+        setMonth={setMonth}
+        assessoria={assessoria}
+        setAssessoria={setAssessoria}
+        loc1={loc1}
+        setLoc1={setLoc1}
+        banco={banco}
+        setBanco={setBanco}
+        semPremioOnly={semPremioOnly}
+        setSemPremioOnly={setSemPremioOnly}
+        clearFilters={clearFilters}
+        filtersOpen={filtersOpen}
+        setFiltersOpen={setFiltersOpen}
+        addOpen={addOpen}
+        setAddOpen={setAddOpen}
+        data={data}
+        loading={loading}
+        error={error}
+        reload={reload}
+        filtered={filtered}
+        filteredTotals={filteredTotals}
+        semPremioVehicles={semPremioVehicles}
+        otherAlerts={otherAlerts}
+        assessoriaChart={assessoriaChart}
+        bancoChart={bancoChart}
+        crm={crm}
+        nfse={nfse}
+        localizados={localizados}
+        radar={radar}
+        crmByPlaca={crmByPlaca}
+      />
+    );
+  }
+
+  if (tab !== "feira" && loading && !data) {
     return (
       <div className="app app-shell">
         <header className="app-header">
@@ -376,15 +442,26 @@ export default function App() {
     );
   }
 
-  if (error && !data) {
+  if (tab !== "feira" && error && !data) {
     return (
       <div className="app state-screen">
         <div className="state-card">
           <p className="state-eyebrow">Conexão</p>
           <h1>Não foi possível carregar os dados</h1>
           <p className="state-body">{error}</p>
+          <p className="state-body">
+            Deixe aberto o terminal <code>npm run api</code> em <code>google-sheets</code> e recarregue.
+            O site sozinho na porta 5173 não basta.
+          </p>
           <button className="btn btn-primary btn-block" type="button" onClick={() => reload()}>
             Tentar de novo
+          </button>
+          <button
+            className="btn btn-ghost btn-block"
+            type="button"
+            onClick={() => setTab("feira")}
+          >
+            Abrir radar Feira
           </button>
         </div>
       </div>
@@ -471,7 +548,7 @@ export default function App() {
   );
 
   return (
-    <div className="app app-shell">
+    <div className={`app app-shell${tab === "crm" ? " is-crm" : ""}`}>
       <header className="app-header">
         <div className="header-row">
           <div>
@@ -481,7 +558,7 @@ export default function App() {
             <p className="brand-sub hide-mobile">Controle de Diligências</p>
           </div>
           <div className="header-actions">
-            {tab !== "local" && (
+            {tab !== "local" && tab !== "feira" && (
               <button
                 type="button"
                 className="icon-btn"
@@ -491,7 +568,7 @@ export default function App() {
                 <IconPlus />
               </button>
             )}
-            {tab !== "nfse" && tab !== "local" && (
+            {tab !== "nfse" && tab !== "local" && tab !== "feira" && (
               <button
                 type="button"
                 className="icon-btn icon-btn-filters"
@@ -509,12 +586,14 @@ export default function App() {
               disabled={
                 loading ||
                 (tab === "nfse" && nfse.loading) ||
-                (tab === "local" && localizados.loading)
+                (tab === "local" && localizados.loading) ||
+                (tab === "feira" && radar.loading)
               }
               onClick={() => {
                 if (tab === "nfse") nfse.reload();
                 else if (tab === "crm") crm.reload();
                 else if (tab === "local") localizados.reload();
+                else if (tab === "feira") radar.reload();
                 else reload({ refresh: true });
               }}
             >
@@ -534,7 +613,9 @@ export default function App() {
                   ? "Tomadores e emissões na aba NFS-e"
                   : tab === "local"
                     ? "Buscar placa no lote…"
-                    : "Buscar placa, assessoria, banco, loc…"
+                    : tab === "feira"
+                      ? "Buscar placa no radar Feira…"
+                      : "Buscar placa, assessoria, banco, loc…"
             }
             enterKeyHint="search"
             aria-label="Buscar"
@@ -545,6 +626,7 @@ export default function App() {
           {[
             ["resumo", "Resumo"],
             ["local", "Local"],
+            ["feira", "Feira"],
             ["crm", "CRM"],
             ["nfse", "NFS-e"],
             ["veiculos", "Veículos"],
@@ -563,7 +645,7 @@ export default function App() {
       </header>
 
       <main className={`tab-panels tab-${tab}`}>
-        <section className={`filters desktop-filters desktop-only${tab === "nfse" || tab === "local" ? " is-hidden" : ""}`}>{filtersForm}</section>
+        <section className={`filters desktop-filters desktop-only${tab === "nfse" || tab === "local" || tab === "feira" ? " is-hidden" : ""}`}>{filtersForm}</section>
 
         {/* RESUMO */}
         <section className={`tab-panel ${tab === "resumo" ? "is-active" : ""}`}>
@@ -750,48 +832,6 @@ export default function App() {
               </button>
             </div>
           )}
-          <div className="vehicle-cards">
-            {filtered.map((v) => (
-              <article key={`${v.placa}-${v.data || ""}`} className="vehicle-card">
-                <div className="vehicle-card-top">
-                  <div>
-                    <p className="placa">{v.placa}</p>
-                    <p className="vehicle-sub">
-                      {formatDate(v.data)} · {v.loc1 || "Sem loc"}
-                    </p>
-                  </div>
-                  <p
-                    className={`vehicle-saldo ${
-                      v.saldo == null ? "" : v.saldo < 0 ? "negative" : "positive"
-                    }`}
-                  >
-                    {formatBRL(v.saldo)}
-                  </p>
-                </div>
-                <div className="vehicle-grid">
-                  <div>
-                    <span>Assessoria</span>
-                    <strong>{v.assessoria || "—"}</strong>
-                  </div>
-                  <div>
-                    <span>Prêmio</span>
-                    <strong className="num-premio">{formatBRL(v.premio)}</strong>
-                  </div>
-                  <div>
-                    <span>Banco</span>
-                    <strong>{v.banco || "—"}</strong>
-                  </div>
-                  <div>
-                    <span>Contato</span>
-                    <strong>{v.contato || "—"}</strong>
-                  </div>
-                </div>
-              </article>
-            ))}
-            {filtered.length === 0 && (
-              <div className="empty-state">Nenhum veículo com os filtros atuais.</div>
-            )}
-          </div>
 
           {/* Desktop table */}
           <div className="table-wrap desktop-only" tabIndex={0}>
@@ -855,6 +895,19 @@ export default function App() {
           />
         </section>
 
+        {/* Radar Feira / Telegram */}
+        <section className={`tab-panel ${tab === "feira" ? "is-active" : ""}`}>
+          <RadarPanel
+            data={radar.data}
+            loading={radar.loading}
+            error={radar.error}
+            onReload={radar.reload}
+            searchQuery={q}
+            crmByPlaca={crmByPlaca}
+            active={tab === "feira"}
+          />
+        </section>
+
         {/* CRM */}
         <section className={`tab-panel ${tab === "crm" ? "is-active" : ""}`}>
           <CrmPanel
@@ -879,6 +932,7 @@ export default function App() {
             saving={nfse.saving}
             onReload={nfse.reload}
             runAction={nfse.runAction}
+            searchQuery={q}
           />
         </section>
       </main>
@@ -900,6 +954,14 @@ export default function App() {
         >
           <IconLocal />
           <span>Local</span>
+        </button>
+        <button
+          type="button"
+          className={tab === "feira" ? "is-active" : ""}
+          onClick={() => setTab("feira")}
+        >
+          <IconFeira />
+          <span>Feira</span>
         </button>
         <button
           type="button"

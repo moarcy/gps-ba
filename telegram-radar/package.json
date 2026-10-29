@@ -6,6 +6,7 @@
     "start": "node src/index.js",
     "login": "node src/login.js",
     "chats": "node src/chats.js",
+    "import:history": "node src/import-history.js",
     "test": "node --test src/radar.test.js"
   },
   "dependencies": {

@@ -36,7 +36,7 @@ function highlightDropStatus(status) {
  * - Handlers/estado em refs → sobrevivem a re-renders do CRM durante o arraste.
  * - Long-press no card inteiro foi abandonado (overflow do board cancelava o pointer).
  */
-export default function CrmCard({ item, labels, onOpen, onMoveToStatus }) {
+export default function CrmCard({ item, onOpen, onMoveToStatus }) {
   const cardRef = useRef(null);
   const handleRef = useRef(null);
   const sessionRef = useRef(null);
@@ -226,41 +226,6 @@ export default function CrmCard({ item, labels, onOpen, onMoveToStatus }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const onBodyPointerDown = (e) => {
-    if (e.button !== 0) return;
-    if (sessionRef.current) return;
-    if (e.pointerType !== "mouse") return;
-
-    const pointerId = e.pointerId;
-    const startX = e.clientX;
-    const startY = e.clientY;
-    let started = false;
-
-    const onMove = (ev) => {
-      if (ev.pointerId !== pointerId) return;
-      if (started) return;
-      if (Math.hypot(ev.clientX - startX, ev.clientY - startY) < 5) return;
-      started = true;
-      cleanup();
-      beginDrag(ev, cardRef.current);
-    };
-
-    const onUp = (ev) => {
-      if (ev.pointerId !== pointerId) return;
-      cleanup();
-    };
-
-    const cleanup = () => {
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
-      window.removeEventListener("pointercancel", onUp);
-    };
-
-    window.addEventListener("pointermove", onMove, { passive: true });
-    window.addEventListener("pointerup", onUp);
-    window.addEventListener("pointercancel", onUp);
-  };
-
   const onBodyClick = (e) => {
     if (suppressClickRef.current) {
       suppressClickRef.current = false;
@@ -294,7 +259,6 @@ export default function CrmCard({ item, labels, onOpen, onMoveToStatus }) {
         className="crm-card-main"
         role="button"
         tabIndex={0}
-        onPointerDown={onBodyPointerDown}
         onClick={onBodyClick}
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === " ") {
@@ -309,13 +273,9 @@ export default function CrmCard({ item, labels, onOpen, onMoveToStatus }) {
         {item.rastreado && <span className="tag-rastreado">Rastreado</span>}
         <p className="crm-card-sub">{item.assessoria || "Sem assessoria"}</p>
         <p className="crm-card-meta">
-          {item.localizador ? `${item.localizador} · ` : ""}
-          {item.veiculo
-            ? `${item.veiculo.slice(0, 24)}${item.veiculo.length > 24 ? "…" : ""}`
-            : "—"}
+          {[item.localizador, item.veiculo].filter(Boolean).join(" · ") || "—"}
         </p>
         <div className="crm-card-foot">
-          <span>{labels[item.status] || item.status}</span>
           <span>Contato {formatShortDate(item.proximoContato)}</span>
         </div>
       </div>

@@ -1,4 +1,5 @@
 import dotenv from "dotenv";
+import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -17,7 +18,24 @@ dotenv.config({ path: path.join(workerDir, ".env") });
 const PORT = Number(process.env.LOCGRAM_WEBHOOK_PORT || 8790);
 const allowedJid = process.env.EVOLUTION_JID_LOCGRAM?.trim() || "";
 const webhookSecret = process.env.LOCGRAM_WEBHOOK_SECRET?.trim() || "";
+const intercept = JSON.parse(
+  fs.readFileSync(path.join(workerDir, "locgram-intercept.json"), "utf8"),
+);
 const seen = createSeenStore(path.join(workerDir, "data", "seen-ids.txt"));
+
+function nameLooksLocgram(meta) {
+  return (intercept.whatsapp?.pushNameIncludes || []).some((n) =>
+    String(meta.pushName || "").toLowerCase().includes(String(n).toLowerCase()),
+  );
+}
+
+function shouldKeep(meta) {
+  if (meta.fromMe) return false;
+  if (!meta.text) return false;
+  if (!looksLikeLocgramOcorrencia(meta.text)) return false;
+  if (!allowedJid) return true;
+  return isLocgramChat(meta, allowedJid) || nameLooksLocgram(meta);
+}
 
 function readBody(req) {
   return new Promise((resolve, reject) => {
@@ -50,12 +68,7 @@ async function handleMessage(body) {
   const results = [];
   for (const item of items) {
     const meta = extractMeta({ ...body, data: item });
-    if (meta.fromMe) continue;
-    if (!meta.text) continue;
-    if (allowedJid && !isLocgramChat(meta, allowedJid) && !looksLikeLocgramOcorrencia(meta.text)) {
-      continue;
-    }
-    if (!looksLikeLocgramOcorrencia(meta.text)) continue;
+    if (!shouldKeep(meta)) continue;
     const id = meta.id || `${meta.jid}:${meta.ts}:${meta.text.slice(0, 40)}`;
     if (seen.has(id)) {
       results.push({ skipped: true, reason: "dup", id });
@@ -77,7 +90,13 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
 
   if (req.method === "GET" && (url.pathname === "/" || url.pathname === "/health")) {
-    send(res, 200, { ok: true, service: "gps-ba-locgram-evolution" });
+    send(res, 200, {
+      ok: true,
+      service: "gps-ba-locgram-evolution",
+      intercept: intercept.id,
+      role: intercept.role,
+      jid: allowedJid || null,
+    });
     return;
   }
 
@@ -105,6 +124,7 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, "0.0.0.0", () => {
   console.log(`Locgram Evolution → http://127.0.0.1:${PORT}/webhook`);
+  console.log(`Intercept: ${intercept.id} (${intercept.role})`);
   console.log("Só coleta Nova ocorrência. Você confere a posição na aba Local do app.");
   if (allowedJid) console.log(`Filtro jid: ${allowedJid}`);
   else console.log("Sem EVOLUTION_JID_LOCGRAM: aceita qualquer chat com cara de Locgram.");

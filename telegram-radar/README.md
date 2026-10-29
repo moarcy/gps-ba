@@ -1,11 +1,8 @@
-# Radar Telegram
+# Radar Telegram — operação Feira
 
-Duas etapas:
+Worker que lê o Painel RK (blacklist de veículos pesados) e avisa só quando a câmera é **Feira de Santana**. As outras câmeras da mesma placa entram no histórico para mapear o próximo ponto (ex.: Feira → Jequié).
 
-1. **Agora** — pegar o alerta da blacklist, filtrar (Endrigo **ou** Feira de Santana) e te mandar no Telegram
-2. **Depois** — gravar histórico e analytics de apreensão (`/placa`, `/horarios`, `/quente`)
-
-Isto **não** vai para a Vercel. Roda no Northflank, ligado o tempo todo.
+Isto **não** vai para a Vercel. Roda no PC (inicialização do Windows) ou no Northflank.
 
 ---
 
@@ -111,7 +108,7 @@ TELEGRAM_API_HASH
 TELEGRAM_SESSION
 TELEGRAM_SOURCE_CHAT_ID
 TELEGRAM_DEST_CHAT_ID
-RADAR_KEYWORDS=ENDRIGO,FEIRA DE SANTANA
+RADAR_KEYWORDS=FEIRA DE SANTANA
 PORT=8080
 ```
 
@@ -119,23 +116,36 @@ Create service. Nos logs deve aparecer:
 
 ```
 Health → :8080
-Filtro: ENDRIGO | FEIRA DE SANTANA
+Filtro GO: FEIRA DE SANTANA (rotas extras só de placas que já passaram em Feira)
 Bot @... no ar
 Listener (conta) conectado
 Ouvindo grupo -100...
 ```
 
-Abra o bot e mande `/start`. Encaminhe um alerta de Feira e um do Endrigo: têm que chegar de volta. Patos/Pedro some.
+Abra o bot e mande `/start`. Encaminhe um alerta de Feira: tem que chegar no grupo. Endrigo em outro estado some do GO.
 
 ---
 
-## Etapa 2 — dados (ainda não)
+## Histórico e mapa
 
-Quando o encaminhamento estiver estável:
+O sistema lê o Painel RK com a **mesma sessão** do listener (não precisa exportar o Telegram):
 
-- histórico por placa
-- horário/dia mais provável
-- câmeras / sentido
-- “quente agora”
+```powershell
+cd "C:\Users\moarc\OneDrive\Área de Trabalho\GPS BA\telegram-radar"
+npm run import:history
+```
 
-Aí sim persistimos fora do container (planilha ou volume), porque no Northflank o disco some se o serviço reiniciar.
+Isso grava só placas que já passaram em Feira, **incluindo** as câmeras seguintes (rotas). Depois abra o dashboard na aba **Feira**.
+
+Feche o radar (`start-radar.cmd`) enquanto o import roda, se a sessão recusar duas conexões ao mesmo tempo.
+
+## PC desligou
+
+O Telegram guarda o Painel RK na nuvem. Ao ligar, o radar puxa as mensagens novas, grava no histórico e avisa GO Feira de até **4 horas** (marcados como atrasado). Mais antigo que isso só entra no mapa, sem alertar a rua.
+
+Se o Node cair com o PC ligado, o `start-radar.cmd` sobe de novo em 10s. No login do Windows o atalho de inicialização chama esse mesmo script.
+
+```powershell
+cd "C:\Users\moarc\OneDrive\Área de Trabalho\GPS BA\telegram-radar"
+.\install-autostart.ps1
+```

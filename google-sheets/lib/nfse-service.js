@@ -1,5 +1,5 @@
 import ExcelJS from "exceljs";
-import { downloadExcel, uploadExcel } from "../excel-drive-client.js";
+import { downloadExcel, editarPlanilha, uploadExcel } from "../excel-drive-client.js";
 import { asNumber, normalizeText } from "./excel-utils.js";
 import {
   appendEmitidaRow,
@@ -25,17 +25,10 @@ async function withGestorWorkbook(mutator) {
     throw Object.assign(new Error("SPREADSHEET_ID_1 não configurado."), { status: 500 });
   }
 
-  const localPath = await downloadExcel(gestorId, { useCache: false });
-  const workbook = new ExcelJS.Workbook();
-  await workbook.xlsx.readFile(localPath);
-  const sheets = ensureNfseSheets(workbook);
-
-  const result = await mutator(workbook, sheets);
-
-  workbook.calcProperties.fullCalcOnLoad = true;
-  await workbook.xlsx.writeFile(localPath);
-  await uploadExcel(gestorId, localPath);
-  return result;
+  return editarPlanilha(gestorId, async (workbook) => {
+    const sheets = ensureNfseSheets(workbook);
+    return mutator(workbook, sheets);
+  });
 }
 
 async function loadNfseSnapshot({ persistIfCreated = true } = {}) {

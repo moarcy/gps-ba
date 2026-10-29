@@ -35,13 +35,21 @@ http
     console.log(`Health → :${healthPort}`);
   });
 
-console.log(`Filtro: ${keywords.join(" | ")}`);
+console.log(`Filtro: ${keywords.join(" | ")} (Telegram: origem e sentido Feira; outras câmeras só se a placa já passou na praça)`);
 
 let bot = null;
 if (botToken) {
-  bot = createRadarBot({ token: botToken, store, keywords });
+  bot = createRadarBot({
+    token: botToken,
+    store,
+    keywords,
+    destChatId: destFromEnv,
+  });
   bot.start({
-    onStart: (me) => console.log(`Bot @${me.username} no ar`),
+    onStart: (me) => {
+      console.log(`Bot @${me.username} no ar`);
+      console.log(`Destino dos alertas: ${destFromEnv || store.getSettings().destChatId || "(mande /start)"}`);
+    },
   });
 }
 
@@ -53,14 +61,14 @@ if (process.env.TELEGRAM_SESSION && process.env.TELEGRAM_API_ID && process.env.T
     sourceChatId: process.env.TELEGRAM_SOURCE_CHAT_ID,
     keywords,
     store,
-    onKeep: async (alerta, motivos) => {
-      if (!bot) return;
+    onKeep: async (alerta, motivos, media = {}) => {
+      if (!bot) return false;
       const dest = destFromEnv || store.getSettings().destChatId;
       if (!dest) {
         console.log(`Filtrado ${alerta.placa}, mas ninguém deu /start no bot ainda.`);
-        return;
+        return false;
       }
-      await notifyDest(bot, dest, alerta, motivos);
+      await notifyDest(bot, dest, alerta, motivos, media);
     },
   });
   console.log(
@@ -75,7 +83,9 @@ if (process.env.TELEGRAM_SESSION && process.env.TELEGRAM_API_ID && process.env.T
 
 function shutdown() {
   console.log("Encerrando…");
-  process.exit(0);
+  Promise.resolve()
+    .then(() => (typeof store.flushSettings === "function" ? store.flushSettings() : null))
+    .finally(() => process.exit(0));
 }
 process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);

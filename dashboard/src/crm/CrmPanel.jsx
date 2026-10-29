@@ -39,6 +39,16 @@ const KANBAN_STATUSES = STATUS_ORDER.filter(
   (s) => !["cancelado", "apreendido", "aguardando_pagamento", "removido"].includes(s),
 );
 
+const CLOSED = new Set(["entregue", "cancelado", "removido"]);
+const EVENT_ORDER = { chegada: 0, mandado: 1, contato: 2, patio: 3, saida: 4, pagamento: 5 };
+
+function filaDesc(a, b) {
+  const da = a.dataOcorrencia || "";
+  const db = b.dataOcorrencia || "";
+  if (da !== db) return db.localeCompare(da);
+  return String(b.atualizadoEm || "").localeCompare(String(a.atualizadoEm || ""));
+}
+
 function buildMonthMatrix(year, month) {
   const first = new Date(year, month, 1);
   const startPad = first.getDay();
@@ -79,6 +89,49 @@ function matchesCrmSearch(item, query, labels = {}) {
   return false;
 }
 
+function PhoneFilas({ statuses, byStatus, labels, onOpen }) {
+  const [status, setStatus] = useState(
+    () => statuses.find((s) => (byStatus[s] || []).length) || statuses[0],
+  );
+  const items = byStatus[status] || [];
+
+  return (
+    <div className="crm-phone-filas">
+      <div className="crm-phone-status" role="tablist" aria-label="Status">
+        {statuses.map((s) => {
+          const count = (byStatus[s] || []).length;
+          if (!count && s === "inapto") return null;
+          return (
+            <button
+              key={s}
+              type="button"
+              role="tab"
+              className={status === s ? "is-active" : ""}
+              onClick={() => setStatus(s)}
+            >
+              {labels[s] || s}
+              <em>{count}</em>
+            </button>
+          );
+        })}
+      </div>
+      <div className="phone-group crm-phone-list">
+        {items.length === 0 && <p className="section-hint">Nenhum veículo neste status.</p>}
+        {items.map((item) => (
+          <button key={item.placa} type="button" className="phone-row" onClick={() => onOpen(item.placa)}>
+            <span className="phone-row-text">
+              <strong className="placa">{item.placa}</strong>
+              <span className="phone-sub">
+                {[item.assessoria, item.localizador].filter(Boolean).join(" · ") || "—"}
+              </span>
+            </span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function CrmPanel({
   data,
   loading,
@@ -89,8 +142,13 @@ export default function CrmPanel({
   searchQuery = "",
   locFilter = "all",
   assessoriaFilter = "all",
+  phone = false,
+  view,
 }) {
-  const [crmTab, setCrmTab] = useState("filas");
+  const [crmTab, setCrmTab] = useState(view || "filas");
+  useEffect(() => {
+    setCrmTab(view || "filas");
+  }, [view]);
   const [selectedPlaca, setSelectedPlaca] = useState(null);
   const [newOpen, setNewOpen] = useState(false);
   const [note, setNote] = useState("");
@@ -147,6 +205,7 @@ export default function CrmPanel({
       const key = STATUS_ORDER.includes(item.status) ? item.status : "nova";
       map[key].push(item);
     }
+    for (const key of Object.keys(map)) map[key].sort(filaDesc);
     return map;
   }, [pipeline]);
 
@@ -213,21 +272,58 @@ export default function CrmPanel({
 
     if (showOps) {
       for (const item of pipeline) {
-        if (!item.proximoContato) continue;
-        if (["entregue", "cancelado"].includes(item.status)) continue;
-        const kind = item.temMandado ? "mandado" : "contato";
-        push(item.proximoContato, {
-          id: `${kind}-${item.placa}`,
-          kind,
-          placa: item.placa,
-          assessoria: item.assessoria,
-          localizador: item.localizador,
-          pago: false,
-          calLabel: item.temMandado ? "MDD" : "Contato",
-        });
+        const fechado = CLOSED.has(item.status);
+        if (!fechado && item.dataOcorrencia) {
+          push(item.dataOcorrencia, {
+            id: `chegada-${item.placa}`,
+            kind: "chegada",
+            placa: item.placa,
+            assessoria: item.assessoria,
+            localizador: item.localizador,
+            pago: false,
+            calLabel: "Novo caso",
+          });
+        }
+        if (!fechado && item.proximoContato) {
+          const kind = item.temMandado ? "mandado" : "contato";
+          push(item.proximoContato, {
+            id: `${kind}-${item.placa}`,
+            kind,
+            placa: item.placa,
+            assessoria: item.assessoria,
+            localizador: item.localizador,
+            pago: false,
+            calLabel: item.temMandado ? "MDD" : "Contato",
+          });
+        }
+        if (item.dataEntradaPatio) {
+          push(item.dataEntradaPatio, {
+            id: `patio-${item.placa}`,
+            kind: "patio",
+            placa: item.placa,
+            assessoria: item.assessoria,
+            localizador: item.localizador,
+            pago: false,
+            calLabel: "Entrada no pátio",
+          });
+        }
+        if (item.dataSaidaPatio) {
+          push(item.dataSaidaPatio, {
+            id: `saida-${item.placa}`,
+            kind: "saida",
+            placa: item.placa,
+            assessoria: item.assessoria,
+            localizador: item.localizador,
+            pago: false,
+            calLabel: "Saída do pátio",
+          });
+        }
       }
     }
 
+    for (const events of map.values()) {
+      events.sort((a, b) => (EVENT_ORDER[a.kind] ?? 9) - (EVENT_ORDER[b.kind] ?? 9) || a.placa.localeCompare(b.placa));
+    }
     return map;
   }, [data, payFilter, searchQuery, pipelinePlacas, pipeline]);
 
@@ -350,6 +446,7 @@ export default function CrmPanel({
 
   return (
     <div className="crm-root">
+      {!view && (
       <div className="crm-toolbar">
         <div className="crm-subnav">
           {[
@@ -374,16 +471,21 @@ export default function CrmPanel({
           </button>
         )}
       </div>
+      )}
 
       {error && <p className="form-error">{error}</p>}
-      {searchQuery.trim() && (
+      {searchQuery.trim() && !phone && (
         <p className="section-hint">
           Busca “{searchQuery.trim()}”: {pipeline.length} veículo
           {pipeline.length === 1 ? "" : "s"} no CRM
         </p>
       )}
 
-      {crmTab === "filas" && (
+      {crmTab === "filas" && phone && (
+        <PhoneFilas statuses={KANBAN_STATUSES} byStatus={byStatus} labels={labels} onOpen={openDetail} />
+      )}
+
+      {crmTab === "filas" && !phone && (
         <>
           <p className="crm-dnd-hint">
             Toque no card para abrir · arraste pela alça ⋮⋮ para mudar a coluna.
@@ -407,7 +509,6 @@ export default function CrmPanel({
                       <CrmCard
                         key={item.placa}
                         item={item}
-                        labels={labels}
                         onOpen={openDetail}
                         onMoveToStatus={moveToStatus}
                       />
@@ -481,7 +582,7 @@ export default function CrmPanel({
 
           <div className="crm-cal-actions">
             <p className="section-hint">
-              Toque num dia para ver o que aconteceu. Recebimentos, contatos e MDD aparecem juntos.
+              Toque num dia para ver os eventos: caso novo, contato, pátio e recebimento.
             </p>
             <button
               type="button"
@@ -685,7 +786,7 @@ export default function CrmPanel({
                             {ev.calLabel} · {ev.placa}
                           </strong>
                           <span>
-                            {ev.assessoria || ev.localizador || "—"}
+                            {[ev.assessoria, ev.localizador].filter(Boolean).join(" · ") || "—"}
                             {ev.kind === "pagamento" && ev.valor != null
                               ? ` · ${formatBRL(ev.valor)}`
                               : ""}
@@ -694,7 +795,7 @@ export default function CrmPanel({
                         </button>
                       ))}
                       {!(calendarDays.get(dayOpen) || []).length && (
-                        <p className="section-hint">Nada agendado neste dia.</p>
+                        <p className="section-hint">Nenhum evento neste dia.</p>
                       )}
                     </div>
                   </div>

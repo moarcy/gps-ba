@@ -13,7 +13,10 @@
     "normalize:loc": "node normalize-crm-localizadores.js",
     "normalize:crm": "node normalize-crm-fields.js",
     "localizados:status": "node push-localizados-status.js",
-    "locgram:listen": "npm start --prefix ../whatsapp-locgram"
+    "locgram:listen": "npm start --prefix ../whatsapp-locgram",
+    "locgram:setup": "npm run setup --prefix ../whatsapp-locgram",
+    "locgram:chats": "npm run chats --prefix ../whatsapp-locgram",
+    "test:iloc": "node --test lib/iloc-webhook.test.js lib/iloc-crm.test.js"
   },
   "dependencies": {
     "dotenv": "^16.4.7",
