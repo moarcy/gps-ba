@@ -53,26 +53,101 @@ export function cellHasFormula(cell) {
   return Boolean(value.formula || value.sharedFormula);
 }
 
+/** Linhas vazias abaixo do último carro, para a conta já existir quando inserir no meio da lista. */
+export const CALC_ROW_BUFFER = 40;
+
+export function controleImpostoFormula(rowNumber) {
+  return `IF(G${rowNumber}="","",G${rowNumber}*13%)`;
+}
+
+export function controleSaldoFormula(rowNumber) {
+  return `IF(COUNTA(G${rowNumber},I${rowNumber},J${rowNumber},K${rowNumber})=0,"",N(G${rowNumber})-N(I${rowNumber})-N(J${rowNumber})-N(K${rowNumber})-N(L${rowNumber}))`;
+}
+
+function formulaJaEsta(cell, expected) {
+  const value = cell?.value;
+  if (!value || typeof value !== "object") return false;
+  if (value.formula === expected) return true;
+  return typeof value.sharedFormula === "string";
+}
+
+function numeroDaCelula(value) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (value && typeof value === "object" && typeof value.result === "number") return value.result;
+  return 0;
+}
+
+function celulaVazia(value) {
+  return value == null || value === "";
+}
+
 /**
- * Imposto (L) e Saldo (M) só nas linhas de dados.
- * Cabeçalho fica texto puro — ARRAYFORMULA/fórmula no L2/M2 vira #REF! no .xlsx
- * aberto no Google Sheets e quebra o filtro.
- *
- * Cada linha leva a própria fórmula. O Sheets junta em bloco compartilhado
- * (ex.: L7:L…); linha inserida ACIMA desse bloco (logo abaixo do cabeçalho)
- * fica sem cálculo — por isso o patch regrava L/M em toda linha de dados.
+ * Imposto e Saldo em cada linha, da primeira até depois do último carro.
+ * O Google Sheets não calcula ARRAYFORMULA neste .xlsx, então a coluna ficava vazia.
+ * Com a mesma fórmula da linha 3 até o fim do bloco, uma linha inserida no meio copia a conta.
  */
-export function applyVehicleCalcFormulas(row, rowNumber, { headerRow = 2 } = {}) {
-  if (rowNumber === headerRow) return;
-  const imposto = row.getCell(12);
-  const saldo = row.getCell(13);
-  setFormula(imposto, `IF(G${rowNumber}="","",G${rowNumber}*13%)`);
-  setFormula(
-    saldo,
-    `IF(COUNTA(G${rowNumber},I${rowNumber},J${rowNumber},K${rowNumber})=0,"",N(G${rowNumber})-N(I${rowNumber})-N(J${rowNumber})-N(K${rowNumber})-N(L${rowNumber}))`,
-  );
-  imposto.numFmt = CURRENCY_FMT;
-  saldo.numFmt = CURRENCY_FMT;
+export function installControleCalcFormulas(worksheet, { headerRow = 2, dataStart = 3 } = {}) {
+  const header = worksheet.getRow(headerRow);
+  const headerImposto = header.getCell(12);
+  const headerSaldo = header.getCell(13);
+  let installed = 0;
+
+  if (headerImposto.value !== "Imposto") {
+    clearCell(headerImposto);
+    headerImposto.value = "Imposto";
+    headerImposto.numFmt = "General";
+    installed += 1;
+  }
+  if (headerSaldo.value !== "Saldo") {
+    clearCell(headerSaldo);
+    headerSaldo.value = "Saldo";
+    headerSaldo.numFmt = "General";
+    installed += 1;
+  }
+
+  let last = dataStart - 1;
+  worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+    if (rowNumber < dataStart) return;
+    for (let col = 1; col <= 11; col++) {
+      if (!celulaVazia(row.getCell(col).value)) {
+        last = Math.max(last, rowNumber);
+        break;
+      }
+    }
+  });
+  const formulaEnd = Math.max(last, dataStart) + CALC_ROW_BUFFER;
+
+  for (let rowNumber = dataStart; rowNumber <= formulaEnd; rowNumber++) {
+    const row = worksheet.getRow(rowNumber);
+    const impostoFormula = controleImpostoFormula(rowNumber);
+    const saldoFormula = controleSaldoFormula(rowNumber);
+    const imposto = row.getCell(12);
+    const saldo = row.getCell(13);
+    const premio = numeroDaCelula(row.getCell(7).value);
+    const apoio = numeroDaCelula(row.getCell(9).value);
+    const loc2 = numeroDaCelula(row.getCell(10).value);
+    const guincho = numeroDaCelula(row.getCell(11).value);
+    const temValor = [7, 9, 10, 11].some((col) => !celulaVazia(row.getCell(col).value));
+    const impostoValor = celulaVazia(row.getCell(7).value) ? null : premio * 0.13;
+    const saldoValor = temValor ? premio - apoio - loc2 - guincho - (impostoValor || 0) : null;
+
+    if (!formulaJaEsta(imposto, impostoFormula)) {
+      setFormula(imposto, impostoFormula);
+      if (typeof impostoValor === "number") imposto.value = { formula: impostoFormula, result: impostoValor };
+      imposto.numFmt = CURRENCY_FMT;
+      installed += 1;
+    }
+    if (!formulaJaEsta(saldo, saldoFormula)) {
+      setFormula(saldo, saldoFormula);
+      if (typeof saldoValor === "number") saldo.value = { formula: saldoFormula, result: saldoValor };
+      saldo.numFmt = CURRENCY_FMT;
+      installed += 1;
+    }
+  }
+
+  worksheet.getColumn(12).numFmt = CURRENCY_FMT;
+  worksheet.getColumn(13).numFmt = CURRENCY_FMT;
+  return { cleared: 0, installed };
 }
 
 export function clearCell(cell) {

@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import dotenv from "dotenv";
 import ExcelJS from "exceljs";
 import { google } from "googleapis";
+import { healControleFile } from "./lib/patch-controle-live.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.join(__dirname, ".env") });
@@ -227,6 +228,15 @@ export async function readSheet(fileId, sheetSelector = {}) {
 }
 
 export async function uploadExcel(fileId, localPath, { etag } = {}) {
+  if (fileId === process.env.SPREADSHEET_ID_1?.trim()) {
+    const report = await healControleFile(localPath);
+    if (report?.changed) {
+      console.log(
+        `Controle: ${report.formatsFixed} datas no formato dd/MM/yyyy, Imposto/Saldo ancorados na coluna.`,
+      );
+    }
+  }
+
   if (etag) {
     const drive = google.drive({ version: "v2", auth: getAuth() });
     try {

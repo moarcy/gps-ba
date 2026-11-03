@@ -1,0 +1,61 @@
+# Evolution local do GPS BA. Porta 8081 no Windows (8080 é o Radar Telegram).
+# Segredos ficam no .env desta pasta, que não entra no git.
+
+services:
+  api:
+    container_name: gpsba_evolution_api
+    image: gpsba-evolution:patched
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    ports:
+      - "127.0.0.1:8081:8080"
+    env_file:
+      - .env
+    volumes:
+      - evolution_instances:/evolution/instances
+    networks:
+      - evolution-net
+
+  redis:
+    container_name: gpsba_evolution_redis
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - evolution_redis:/data
+    networks:
+      - evolution-net
+
+  postgres:
+    container_name: gpsba_evolution_postgres
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: evolution_db
+      POSTGRES_USER: evolution
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - evolution-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U evolution -d evolution_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  evolution_instances:
+  evolution_redis:
+  postgres_data:
+
+networks:
+  evolution-net:
+    driver: bridge

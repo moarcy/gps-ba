@@ -8,7 +8,7 @@ import {
   normalizeText,
   pickFirst,
   resolveDespesa,
-  applyVehicleCalcFormulas,
+  installControleCalcFormulas,
   setFormula,
   sortRecords,
   toExcelDate,
@@ -297,14 +297,12 @@ export function writeControleSheet(worksheet, records) {
     }
     row.getCell(14).value = null;
 
-    // Imposto só com prêmio. Apoio/Loc/Guincho são sempre despesas (com ou sem prêmio).
-    // Saldo = N(Prêmio) − despesas − N(Imposto); fica negativo se só houver despesas.
-    applyVehicleCalcFormulas(row, rowNumber, { headerRow: HEADER_ROW });
     styleControleDataRow(row, rowNumber, { zebra: i % 2 === 1 });
     row.commit();
   }
 
   trimRowsAfter(worksheet, dataEnd);
+  installControleCalcFormulas(worksheet, { headerRow: HEADER_ROW, dataStart: DATA_START });
   applySaldoConditionalFormatting(worksheet, dataEnd);
   const lastUsed = DATA_START + Math.max(records.length, 1) - 1;
   const filterEnd = Math.min(dataEnd, Math.max(lastUsed + 8, DATA_START));

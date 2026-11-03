@@ -5,7 +5,9 @@
   "scripts": {
     "start": "node src/index.js",
     "setup": "node src/setup-webhook.js",
-    "chats": "node src/find-locgram-jid.js"
+    "chats": "node src/find-locgram-jid.js",
+    "progress": "node src/sync-progress.js",
+    "status": "node src/status-preview.js"
   },
   "dependencies": {
     "dotenv": "^16.4.7"

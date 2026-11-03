@@ -40,7 +40,7 @@ const KANBAN_STATUSES = STATUS_ORDER.filter(
 );
 
 const CLOSED = new Set(["entregue", "cancelado", "removido"]);
-const EVENT_ORDER = { chegada: 0, mandado: 1, contato: 2, patio: 3, saida: 4, pagamento: 5 };
+const EVENT_ORDER = { chegada: 0, mandado: 1, contato: 2, zap: 3, patio: 4, saida: 5, pagamento: 6 };
 
 function filaDesc(a, b) {
   const da = a.dataOcorrencia || "";
@@ -318,6 +318,22 @@ export default function CrmPanel({
             calLabel: "Saída do pátio",
           });
         }
+      }
+      const byPlaca = new Map(pipeline.map((item) => [item.placa, item]));
+      for (const entry of data?.timeline || []) {
+        if (entry.tipo !== "zap" || !entry.dataHora) continue;
+        if (searchQuery.trim() && !pipelinePlacas.has(entry.placa)) continue;
+        const item = byPlaca.get(entry.placa);
+        const label = String(entry.mensagem || "").split("—")[0].trim() || "Zap";
+        push(entry.dataHora, {
+          id: entry.id,
+          kind: "zap",
+          placa: entry.placa,
+          assessoria: item?.assessoria || "",
+          localizador: item?.localizador || "",
+          pago: false,
+          calLabel: label,
+        });
       }
     }
 

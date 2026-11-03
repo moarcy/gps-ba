@@ -1,103 +1,107 @@
+import ExcelJS from "exceljs";
 import {
-  applyVehicleCalcFormulas,
-  cellHasFormula,
-  cellValue,
-  clearCell,
   DATE_FMT,
+  cellValue,
+  installControleCalcFormulas,
   normalizePlaca,
   toExcelDate,
 } from "./excel-utils.js";
-import { DATA_START, HEADER_ROW, HEADERS } from "./controle-sheet-theme.js";
+import { DATA_START, HEADER_ROW } from "./controle-sheet-theme.js";
 
 function dateYear(value) {
   if (!(value instanceof Date) || Number.isNaN(value.getTime())) return null;
   return value.getUTCFullYear();
 }
 
-function isoDay(value) {
-  if (!(value instanceof Date) || Number.isNaN(value.getTime())) return null;
-  return value.toISOString().slice(0, 10);
-}
-
-function restoreImpostoSaldoHeaders(worksheet) {
-  const header = worksheet.getRow(HEADER_ROW);
-  const imposto = header.getCell(12);
-  const saldo = header.getCell(13);
-  clearCell(imposto);
-  clearCell(saldo);
-  imposto.value = HEADERS[11];
-  saldo.value = HEADERS[12];
-  imposto.numFmt = "General";
-  saldo.numFmt = "General";
+/** `mm` / `m` no formato é minuto no Google Sheets e a data aparece como #VALUE!. */
+export function dateFormatUsesMinutes(fmt) {
+  const text = String(fmt || "");
+  if (!text || text === "General" || text === "@") return false;
+  return /m/i.test(text.replace(/MM/g, ""));
 }
 
 /**
- * Cirúrgico: não reconstrói Planilha1.
- * - Coluna A: ano 20206 → 2026 e formato dd/MM/yyyy (Sheets trata mm como minuto).
- * - Imposto/Saldo em toda linha de dados (placa ou slot vazio).
- * Cabeçalho L2/M2 volta a ser texto — fórmula aí vira #REF! no .xlsx.
+ * Corrige o formato da coluna Data e ancora Imposto/Saldo numa fórmula só.
+ * Não mexe em placa, prêmio nem nas outras colunas.
  */
-export function patchControleDatesAndFormulas(worksheet) {
+export function healControleSheet(worksheet) {
   const report = {
-    datesFixed: [],
-    formatsFixed: [],
-    formulasAdded: [],
-    headerRestored: false,
+    changed: false,
+    formatsFixed: 0,
+    datesRepaired: 0,
+    formulasCleared: 0,
+    formulasInstalled: 0,
   };
+  if (!worksheet) return { ...report, skipped: true };
 
-  restoreImpostoSaldoHeaders(worksheet);
-  report.headerRestored = true;
-
-  const last = Math.max(worksheet.rowCount || 0, DATA_START);
-  let lastPlated = DATA_START;
-  for (let rowNumber = DATA_START; rowNumber <= last; rowNumber++) {
-    if (normalizePlaca(cellValue(worksheet.getRow(rowNumber).getCell(6)))) {
-      lastPlated = rowNumber;
-    }
+  const headerDate = worksheet.getRow(HEADER_ROW).getCell(1);
+  if (dateFormatUsesMinutes(headerDate.numFmt)) {
+    headerDate.numFmt = "General";
+    report.changed = true;
   }
-  const formulaEnd = Math.min(last, Math.max(lastPlated + 40, DATA_START));
 
-  for (let rowNumber = DATA_START; rowNumber <= last; rowNumber++) {
-    const row = worksheet.getRow(rowNumber);
-    const placa = normalizePlaca(cellValue(row.getCell(6)));
-
+  worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+    if (rowNumber < DATA_START) return;
     const dateCell = row.getCell(1);
+    const placa = normalizePlaca(cellValue(row.getCell(6)));
     const current = dateCell.value;
-    const fmt = String(dateCell.numFmt || "");
+    const hasDate = current instanceof Date || (typeof current === "number" && current > 20000);
+    if (!placa && !hasDate) return;
+
     const year = dateYear(current);
-    const repaired = toExcelDate(current);
-
-    if (placa) {
-      const yearBroken = year != null && year > 2100;
-      const formatBroken = fmt.includes("dd/mm/") && !fmt.includes("dd/MM/");
-      const utcMidnight =
-        current instanceof Date &&
-        current.getUTCHours() === 0 &&
-        current.getUTCMinutes() === 0;
-
-      if (repaired && (yearBroken || formatBroken || utcMidnight)) {
+    if (year != null && year > 2100) {
+      const repaired = toExcelDate(current);
+      if (repaired) {
         dateCell.value = repaired;
-        report.datesFixed.push({
-          row: rowNumber,
-          placa,
-          from: current instanceof Date ? current.toISOString() : String(current ?? ""),
-          to: isoDay(repaired),
-        });
-      }
-
-      if (fmt !== DATE_FMT) {
-        dateCell.numFmt = DATE_FMT;
-        if (!yearBroken && !formatBroken) {
-          report.formatsFixed.push({ row: rowNumber, placa, from: fmt || "(vazio)" });
-        }
+        report.datesRepaired += 1;
+        report.changed = true;
       }
     }
 
-    if (rowNumber <= formulaEnd && (!cellHasFormula(row.getCell(12)) || !cellHasFormula(row.getCell(13)))) {
-      applyVehicleCalcFormulas(row, rowNumber, { headerRow: HEADER_ROW });
-      report.formulasAdded.push({ row: rowNumber, placa: placa || "" });
+    if (dateCell.numFmt !== DATE_FMT) {
+      dateCell.numFmt = DATE_FMT;
+      report.formatsFixed += 1;
+      report.changed = true;
     }
+  });
+
+  if (worksheet.getColumn(1).numFmt !== DATE_FMT) {
+    worksheet.getColumn(1).numFmt = DATE_FMT;
+    report.changed = true;
   }
+
+  const formulas = installControleCalcFormulas(worksheet, {
+    headerRow: HEADER_ROW,
+    dataStart: DATA_START,
+  });
+  report.formulasCleared = formulas.cleared;
+  report.formulasInstalled = formulas.installed;
+  if (formulas.cleared || formulas.installed) report.changed = true;
 
   return report;
+}
+
+export async function healControleFile(localPath) {
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.readFile(localPath);
+  const worksheet = workbook.getWorksheet("Planilha1");
+  if (!worksheet) return { skipped: true, changed: false };
+
+  const report = healControleSheet(worksheet);
+  if (!report.changed) return report;
+
+  workbook.calcProperties.fullCalcOnLoad = true;
+  await workbook.xlsx.writeFile(localPath);
+  return report;
+}
+
+/** Compatível com o script antigo: o reparo agora é o heal da coluna inteira. */
+export function patchControleDatesAndFormulas(worksheet) {
+  const report = healControleSheet(worksheet);
+  return {
+    ...report,
+    datesFixed: [],
+    headerRestored: true,
+    formulasAdded: report.formulasInstalled ? ["linhas"] : [],
+  };
 }

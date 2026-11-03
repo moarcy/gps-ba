@@ -10,6 +10,7 @@
     "api": "node api-server.js",
     "nfse-worker": "npm --prefix nfse-worker start",
     "import:locgram": "node import-locgram-chat.js",
+    "crm:zap-logs": "node apply-whatsapp-plate-logs.js",
     "normalize:loc": "node normalize-crm-localizadores.js",
     "normalize:crm": "node normalize-crm-fields.js",
     "localizados:status": "node push-localizados-status.js",

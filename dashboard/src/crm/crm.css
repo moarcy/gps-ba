@@ -446,6 +446,10 @@ body.crm-dragging .crm-kanban {
   background: rgba(196, 139, 139, 0.95);
 }
 
+.crm-cal-dot.kind-zap {
+  background: rgba(122, 162, 240, 0.95);
+}
+
 .crm-cal-dot.kind-pagamento {
   background: rgba(122, 162, 240, 0.85);
 }
@@ -490,6 +494,10 @@ body.crm-dragging .crm-kanban {
 
 .crm-day-item.kind-contato {
   border-color: rgba(196, 163, 90, 0.35);
+}
+
+.crm-day-item.kind-zap {
+  border-color: rgba(122, 162, 240, 0.4);
 }
 
 .crm-day-item.kind-patio,

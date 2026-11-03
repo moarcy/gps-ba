@@ -367,8 +367,7 @@ export function applyControleAutoFilter(worksheet, lastDataRow) {
 
 /**
  * Filtro no cabeçalho (setas de Loc / Banco / Assessoria).
- * Não usa Excel Table: TableStyleMedium2 pinta fundo claro e, no Google Sheets,
- * o intervalo da tabela não acompanha linhas inseridas no topo.
+ * Não usa Excel Table: no Google Sheets o intervalo da tabela não acompanha linha inserida no topo.
  */
 export function applyControleDataTable(worksheet, lastDataRow) {
   if (lastDataRow < DATA_START) return;
