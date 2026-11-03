@@ -48,6 +48,8 @@ const LOCALIZADOR_ALIASES = {
   ailton: "AILTON",
   ricardo: "RICARDO",
   endrigo: "ENDRIGO",
+  // "Nova ocorrência - Locgram" não traz o nome de quem achou. É caso do Endrigo.
+  locgram: "ENDRIGO",
 };
 
 function locKey(value) {
