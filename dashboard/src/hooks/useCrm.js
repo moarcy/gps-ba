@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { apiFetch } from "../lib/api";
 
 async function crmFetch(options = {}) {
-  const res = await fetch("/api/crm", options);
+  const res = await apiFetch("/api/crm", options);
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
   return body;

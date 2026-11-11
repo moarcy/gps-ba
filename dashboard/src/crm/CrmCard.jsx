@@ -36,7 +36,7 @@ function highlightDropStatus(status) {
  * - Handlers/estado em refs → sobrevivem a re-renders do CRM durante o arraste.
  * - Long-press no card inteiro foi abandonado (overflow do board cancelava o pointer).
  */
-export default function CrmCard({ item, onOpen, onMoveToStatus }) {
+export default function CrmCard({ item, onOpen, onMoveToStatus, locator = false }) {
   const cardRef = useRef(null);
   const handleRef = useRef(null);
   const sessionRef = useRef(null);
@@ -242,6 +242,7 @@ export default function CrmCard({ item, onOpen, onMoveToStatus }) {
 
   return (
     <article ref={cardRef} className="crm-card" data-placa={item.placa}>
+      {!locator && (
       <button
         ref={handleRef}
         type="button"
@@ -255,6 +256,7 @@ export default function CrmCard({ item, onOpen, onMoveToStatus }) {
       >
         <span aria-hidden="true">⋮⋮</span>
       </button>
+      )}
       <div
         className="crm-card-main"
         role="button"
@@ -271,9 +273,13 @@ export default function CrmCard({ item, onOpen, onMoveToStatus }) {
           <strong className="placa">{item.placa}</strong>
         </div>
         {item.rastreado && <span className="tag-rastreado">Rastreado</span>}
-        <p className="crm-card-sub">{item.assessoria || "Sem assessoria"}</p>
+        <p className="crm-card-sub">
+          {locator ? item.veiculo || "Sem descrição" : item.assessoria || "Sem assessoria"}
+        </p>
         <p className="crm-card-meta">
-          {[item.localizador, item.veiculo].filter(Boolean).join(" · ") || "—"}
+          {locator
+            ? [item.cor, item.uf].filter(Boolean).join(" · ") || "—"
+            : [item.localizador, item.veiculo].filter(Boolean).join(" · ") || "—"}
         </p>
         <div className="crm-card-foot">
           <span>Contato {formatShortDate(item.proximoContato)}</span>

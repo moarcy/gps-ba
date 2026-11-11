@@ -1,9 +1,12 @@
 import { execFileSync } from "node:child_process";
+import dotenv from "dotenv";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { getCrmData } from "../../google-sheets/lib/crm-service.js";
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
+dotenv.config({ path: path.join(root, "..", "google-sheets", ".env") });
 const listFile = path.join(root, "..", "mensagens-assessorias-amanha.txt");
 const outDir = path.join(root, "..", "google-sheets", ".cache");
 const outTxt = path.join(outDir, "whatsapp-status-preview.txt");
@@ -182,9 +185,7 @@ function worthLogging(phrase, placa) {
 
 async function plateUniverse() {
   const plates = parseList(fs.readFileSync(listFile, "utf8"));
-  const response = await fetch("http://127.0.0.1:8787/api/crm");
-  if (!response.ok) throw new Error(`CRM HTTP ${response.status}`);
-  const data = await response.json();
+  const data = await getCrmData();
   let fromCrm = 0;
   for (const item of data.pipeline || []) {
     const placa = String(item.placa || "").trim().toUpperCase();

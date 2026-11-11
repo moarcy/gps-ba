@@ -1,3 +1,4 @@
+import { requireAdmin } from "../google-sheets/lib/access-control.js";
 import ExcelJS from "exceljs";
 import { downloadExcel } from "../google-sheets/excel-drive-client.js";
 import { buildDashboardPayload } from "../google-sheets/lib/dashboard-data.js";
@@ -52,7 +53,7 @@ async function getDashboardData({ force = false } = {}) {
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
 
   if (req.method === "OPTIONS") {
     res.status(204).end();
@@ -65,12 +66,13 @@ export default async function handler(req, res) {
   }
 
   try {
+    requireAdmin(req);
     const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
     const force = url.searchParams.get("refresh") === "1";
     const data = await getDashboardData({ force });
     res.status(200).json(data);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: error.message || "Erro interno" });
+    res.status(error.status || 500).json({ error: error.message || "Erro interno" });
   }
 }

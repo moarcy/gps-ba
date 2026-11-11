@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
+import { apiFetch } from "../lib/api";
 
 async function radarFetch() {
-  const res = await fetch("/api/radar");
+  const res = await apiFetch("/api/radar");
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
   return body;

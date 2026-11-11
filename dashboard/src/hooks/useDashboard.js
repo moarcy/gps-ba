@@ -1,16 +1,18 @@
 import { useCallback, useEffect, useState } from "react";
+import { apiFetch } from "../lib/api";
 
-export function useDashboard() {
+export function useDashboard({ enabled = true } = {}) {
   const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(enabled);
   const [error, setError] = useState(null);
 
   const load = useCallback(async ({ refresh = false } = {}) => {
+    if (!enabled) return;
     setLoading(true);
     setError(null);
     try {
       const url = refresh ? "/api/dashboard?refresh=1" : "/api/dashboard";
-      const res = await fetch(url);
+      const res = await apiFetch(url);
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error(body.error || `HTTP ${res.status}`);
@@ -22,11 +24,15 @@ export function useDashboard() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [enabled]);
 
   useEffect(() => {
+    if (!enabled) {
+      setLoading(false);
+      return;
+    }
     load();
-  }, [load]);
+  }, [enabled, load]);
 
   return { data, loading, error, reload: load };
 }

@@ -14,14 +14,19 @@ import {
 import {
   appendTimelineRow,
   daysBetween,
+  ensureAccessUsers,
   ensureCrmSheets,
+  readEnderecos,
   readPagamentos,
   readPipeline,
   readTimeline,
   toIsoDate,
+  upsertEnderecoRow,
   upsertPagamentoRow,
   upsertPipelineRow,
 } from "./crm-sheets.js";
+import { publicLocalizadorCar, scopeCrmForLocalizador } from "./access-control.js";
+import { readSeedUsers } from "./access-store.js";
 import { normalizePlaca, normalizeText } from "./excel-utils.js";
 import { parseWhatsappOcorrencia } from "./parse-whatsapp-ocorrencia.js";
 import {
@@ -85,8 +90,10 @@ async function loadCrmSnapshot({ persistIfCreated = true, enrichFromControle = t
   const hadPipeline = Boolean(workbook.getWorksheet("CRM Pipeline"));
   const hadTimeline = Boolean(workbook.getWorksheet("CRM Timeline"));
   const hadPagamentos = Boolean(workbook.getWorksheet("CRM Pagamentos"));
+  const hadAcessos = Boolean(workbook.getWorksheet("CRM Acessos"));
   const sheets = ensureCrmSheets(workbook);
-  const created = !hadPipeline || !hadTimeline || !hadPagamentos;
+  const seeded = ensureAccessUsers(sheets.acessos, readSeedUsers());
+  const created = !hadPipeline || !hadTimeline || !hadPagamentos || !hadAcessos || seeded > 0;
 
   let pipeline = readPipeline(sheets.pipeline);
   let dirtyRows = [];
@@ -116,6 +123,7 @@ async function loadCrmSnapshot({ persistIfCreated = true, enrichFromControle = t
       pipeline,
       timeline: readTimeline(sheets.timeline),
       pagamentos: readPagamentos(sheets.pagamentos),
+      enderecos: readEnderecos(sheets.enderecos),
     };
   } finally {
     descartarArquivo(localPath);
@@ -330,9 +338,13 @@ function buildCrmPayload(snapshot) {
   };
 }
 
-export async function getCrmData() {
+export async function getCrmData(actor = null) {
   const snapshot = await loadCrmSnapshot();
-  return buildCrmPayload(snapshot);
+  const payload = buildCrmPayload(snapshot);
+  payload.enderecos = (snapshot.enderecos || []).map(({ _row, ...item }) => item);
+  if (actor?.papel === "localizador") return scopeCrmForLocalizador(payload, actor);
+  if (actor?.papel === "admin") payload.meta = { ...payload.meta, papel: "admin" };
+  return payload;
 }
 
 export function previewWhatsapp(rawText) {
@@ -722,4 +734,218 @@ export async function sendToControle(body = {}) {
   });
 
   return { ok: true, controle: result, placa };
+}
+
+function httpError(message, status) {
+  return Object.assign(new Error(message), { status });
+}
+
+function sameLocalizador(a, b) {
+  return String(a || "").trim().toUpperCase() === String(b || "").trim().toUpperCase();
+}
+
+export async function createLocalizadorOcorrencia({ placa, endereco, localizador, autor }) {
+  const plate = normalizePlaca(placa);
+  const texto = normalizeText(endereco);
+  const loc = normalizeLocalizador(localizador);
+  if (!plate) throw httpError("Informe a placa.", 400);
+  if (!texto) throw httpError("Informe o endereço.", 400);
+  if (!loc) throw httpError("Localizador inválido.", 400);
+
+  return withGestorWorkbook(async (_wb, sheets) => {
+    const prev = readPipeline(sheets.pipeline).find((item) => item.placa === plate);
+    if (prev) {
+      throw httpError(
+        sameLocalizador(prev.localizador, loc)
+          ? "Esta placa já está na sua fila. Abra o card para alterar o endereço."
+          : "Não foi possível abrir esta ocorrência.",
+        sameLocalizador(prev.localizador, loc) ? 409 : 403,
+      );
+    }
+
+    const now = new Date().toISOString();
+    const record = {
+      placa: plate,
+      dataOcorrencia: todayIso(),
+      veiculo: "",
+      cor: "",
+      origem: "",
+      uf: "",
+      assessoria: "",
+      telefone: "",
+      localizador: loc,
+      status: "nova",
+      rastreado: false,
+      temMandado: false,
+      usaGuincho: false,
+      patio: "",
+      dataApreensao: null,
+      dataEntradaPatio: null,
+      dataSaidaPatio: null,
+      valorDiaria: null,
+      proximoContato: plusDaysIso(7),
+      observacoes: "",
+      rawWhatsapp: "",
+      noControle: false,
+      atualizadoEm: now,
+    };
+    upsertPipelineRow(sheets.pipeline, record);
+    const enderecoRow = {
+      id: `e-${Date.now()}`,
+      placa: plate,
+      ordem: 1,
+      texto,
+      atualizadoEm: now,
+      atualizadoPor: autor || loc,
+    };
+    upsertEnderecoRow(sheets.enderecos, enderecoRow);
+    appendTimelineRow(sheets.timeline, {
+      placa: plate,
+      tipo: "status",
+      mensagem: "Ocorrência criada — status Nova ocorrência",
+    });
+    appendTimelineRow(sheets.timeline, {
+      placa: plate,
+      tipo: "endereco",
+      mensagem: `END 1 adicionado: ${texto}`,
+    });
+    return {
+      ok: true,
+      ocorrencia: publicLocalizadorCar(record),
+      endereco: {
+        id: enderecoRow.id,
+        placa: plate,
+        ordem: 1,
+        texto,
+        atualizadoEm: now,
+        atualizadoPor: enderecoRow.atualizadoPor,
+      },
+    };
+  });
+}
+
+export async function saveEndereco({ placa, ordem, texto, autor, actor }) {
+  const plate = normalizePlaca(placa);
+  const text = normalizeText(texto);
+  if (!plate) throw httpError("Informe a placa.", 400);
+  if (!text) throw httpError("Informe o endereço.", 400);
+  if (text.length > 500) throw httpError("Endereço muito longo.", 400);
+
+  return withGestorWorkbook(async (_wb, sheets) => {
+    const car = readPipeline(sheets.pipeline).find((item) => item.placa === plate);
+    const allowed =
+      car &&
+      (actor?.papel !== "localizador" || sameLocalizador(car.localizador, actor.localizador));
+    if (!allowed) {
+      throw httpError(
+        actor?.papel === "localizador" ? "Placa não encontrada na sua fila." : "Placa não encontrada no CRM.",
+        404,
+      );
+    }
+
+    const all = readEnderecos(sheets.enderecos).filter((item) => item.placa === plate);
+    let ordemNum = Number(ordem);
+    if (!Number.isInteger(ordemNum) || ordemNum < 1) {
+      ordemNum = all.reduce((max, item) => Math.max(max, item.ordem), 0) + 1;
+    }
+    const existing = all.find((item) => item.ordem === ordemNum);
+    const before = existing?.texto || "";
+    const now = new Date().toISOString();
+    const row = {
+      id: existing?.id || `e-${Date.now()}`,
+      placa: plate,
+      ordem: ordemNum,
+      texto: text,
+      atualizadoEm: now,
+      atualizadoPor: autor || actor?.usuario || "",
+    };
+    if (!existing || before !== text) {
+      upsertEnderecoRow(sheets.enderecos, row);
+      appendTimelineRow(sheets.timeline, {
+        placa: plate,
+        tipo: "endereco",
+        mensagem: before
+          ? `END ${ordemNum} alterado: "${before}" → "${text}"`
+          : `END ${ordemNum} adicionado: ${text}`,
+      });
+    }
+    return {
+      ok: true,
+      endereco: {
+        id: row.id,
+        placa: row.placa,
+        ordem: row.ordem,
+        texto: row.texto,
+        atualizadoEm: row.atualizadoEm,
+        atualizadoPor: row.atualizadoPor,
+      },
+    };
+  });
+}
+
+export async function dispatchCrmAction(body = {}, actor) {
+  if (!actor) throw httpError("Faça login.", 401);
+  const action = body.action || body.op;
+
+  if (actor.papel === "localizador") {
+    if (action === "create" || action === "create_ocorrencia") {
+      return {
+        status: 201,
+        data: await createLocalizadorOcorrencia({
+          placa: body.placa,
+          endereco: body.endereco,
+          localizador: actor.localizador,
+          autor: actor.usuario,
+        }),
+      };
+    }
+    if (action === "endereco" || action === "update_endereco") {
+      return {
+        status: 200,
+        data: await saveEndereco({
+          placa: body.placa,
+          ordem: body.ordem,
+          texto: body.texto || body.endereco,
+          autor: actor.usuario,
+          actor,
+        }),
+      };
+    }
+    throw httpError("Sem permissão.", 403);
+  }
+
+  if (action === "preview") return { status: 200, data: previewWhatsapp(body.text || body.whatsapp || body.rawWhatsapp) };
+  if (action === "create" || action === "create_ocorrencia") {
+    return { status: 201, data: await createOcorrencia(body) };
+  }
+  if (action === "update" || action === "update_ocorrencia") {
+    const { action: _a, op: _o, placa, ...patch } = body;
+    return { status: 200, data: await updateOcorrencia(placa, patch) };
+  }
+  if (action === "timeline" || action === "add_timeline") {
+    return { status: 201, data: await addTimelineEvent(body) };
+  }
+  if (action === "pagamento" || action === "upsert_pagamento") {
+    return { status: 200, data: await upsertPagamento(body) };
+  }
+  if (action === "bridge" || action === "send_controle") {
+    return { status: 200, data: await sendToControle(body) };
+  }
+  if (action === "endereco" || action === "update_endereco") {
+    return {
+      status: 200,
+      data: await saveEndereco({
+        placa: body.placa,
+        ordem: body.ordem,
+        texto: body.texto || body.endereco,
+        autor: actor.usuario,
+        actor,
+      }),
+    };
+  }
+
+  throw httpError(
+    "action inválida. Use: create | update | timeline | pagamento | bridge | preview | endereco",
+    400,
+  );
 }

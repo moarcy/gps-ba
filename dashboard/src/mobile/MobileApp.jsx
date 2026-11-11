@@ -131,6 +131,8 @@ export default function MobileApp({
   localizados,
   radar,
   crmByPlaca,
+  locator = false,
+  onLogout,
 }) {
   const [vehicle, setVehicle] = useState(null);
   const [insight, setInsight] = useState("assessoria");
@@ -181,7 +183,9 @@ export default function MobileApp({
 
   const searchPlaceholder =
     tab === "crm" || tab === "calendario"
-      ? "Placa, loc, assessoria, status"
+      ? locator
+        ? "Placa ou veículo"
+        : "Placa, loc, assessoria, status"
       : tab === "local"
         ? "Placa do dia"
         : tab === "feira"
@@ -243,8 +247,9 @@ export default function MobileApp({
         onReload={crm.reload}
         runAction={crm.runAction}
         searchQuery={q}
-        locFilter={loc1}
-        assessoriaFilter={assessoria}
+        locFilter={locator ? "all" : loc1}
+        assessoriaFilter={locator ? "all" : assessoria}
+        locator={locator}
       />
     );
   } else if (tab === "resumo") {
@@ -426,7 +431,7 @@ export default function MobileApp({
             </div>
           )}
           <div className="phone-tools">
-            {FILTER_TABS.has(tab) && (
+            {!locator && FILTER_TABS.has(tab) && (
               <button
                 type="button"
                 className="phone-icon"
@@ -445,6 +450,9 @@ export default function MobileApp({
               onClick={refresh}
             >
               <IconRefresh />
+            </button>
+            <button type="button" className="btn btn-ghost" onClick={onLogout}>
+              Sair
             </button>
           </div>
         </div>
@@ -475,7 +483,13 @@ export default function MobileApp({
       <main className="phone-main">{body}</main>
 
       <nav className="phone-nav" aria-label="Navegação principal">
-        {NAV.map(([id, label, Icon]) => {
+        {(locator
+          ? [
+              ["crm", "Filas", IconCrm],
+              ["calendario", "Calendário", IconCalendar],
+            ]
+          : NAV
+        ).map(([id, label, Icon]) => {
           const active = id === "mais" ? Boolean(NESTED[tab] || tab === "mais") : tab === id;
           return (
             <button

@@ -89,7 +89,75 @@ function matchesCrmSearch(item, query, labels = {}) {
   return false;
 }
 
-function PhoneFilas({ statuses, byStatus, labels, onOpen }) {
+function AddressEditor({ placa, enderecos, saving, draft, setDraft, addrNew, setAddrNew, onSave }) {
+  const rows = (enderecos || [])
+    .filter((item) => item.placa === placa)
+    .sort((a, b) => a.ordem - b.ordem);
+  const nextOrdem = rows.reduce((max, item) => Math.max(max, item.ordem), 0) + 1;
+
+  return (
+    <div className="crm-address-box">
+      <p className="crm-patio-box-title">Endereços</p>
+      {rows.map((end) => {
+        const value = draft[end.ordem] ?? end.texto;
+        return (
+          <div key={end.id || end.ordem} className="crm-address-row">
+            <label htmlFor={`end-${placa}-${end.ordem}`}>END {end.ordem}</label>
+            <textarea
+              id={`end-${placa}-${end.ordem}`}
+              rows={2}
+              value={value}
+              onChange={(event) => setDraft((current) => ({ ...current, [end.ordem]: event.target.value }))}
+            />
+            <button
+              type="button"
+              className="btn btn-ghost"
+              disabled={saving || !value.trim() || value.trim() === end.texto}
+              onClick={async () => {
+                await onSave({ ordem: end.ordem, texto: value.trim() });
+                setDraft((current) => {
+                  const next = { ...current };
+                  delete next[end.ordem];
+                  return next;
+                });
+              }}
+            >
+              Salvar
+            </button>
+            <small>
+              {end.atualizadoPor || "—"}
+              {end.atualizadoEm ? ` · ${formatDateTime(end.atualizadoEm)}` : ""}
+            </small>
+          </div>
+        );
+      })}
+      {!rows.length && <p className="section-hint">Nenhum endereço ainda.</p>}
+      <div className="crm-address-row">
+        <label htmlFor={`end-new-${placa}`}>END {nextOrdem}</label>
+        <textarea
+          id={`end-new-${placa}`}
+          rows={2}
+          value={addrNew}
+          onChange={(event) => setAddrNew(event.target.value)}
+          placeholder="Novo endereço"
+        />
+        <button
+          type="button"
+          className="btn btn-primary"
+          disabled={saving || !addrNew.trim()}
+          onClick={async () => {
+            await onSave({ texto: addrNew.trim() });
+            setAddrNew("");
+          }}
+        >
+          Adicionar
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function PhoneFilas({ statuses, byStatus, labels, onOpen, locator = false }) {
   const [status, setStatus] = useState(
     () => statuses.find((s) => (byStatus[s] || []).length) || statuses[0],
   );
@@ -100,7 +168,7 @@ function PhoneFilas({ statuses, byStatus, labels, onOpen }) {
       <div className="crm-phone-status" role="tablist" aria-label="Status">
         {statuses.map((s) => {
           const count = (byStatus[s] || []).length;
-          if (!count && s === "inapto") return null;
+          if (!locator && !count && s === "inapto") return null;
           return (
             <button
               key={s}
@@ -122,7 +190,9 @@ function PhoneFilas({ statuses, byStatus, labels, onOpen }) {
             <span className="phone-row-text">
               <strong className="placa">{item.placa}</strong>
               <span className="phone-sub">
-                {[item.assessoria, item.localizador].filter(Boolean).join(" · ") || "—"}
+                {locator
+                  ? item.veiculo || "—"
+                  : [item.assessoria, item.localizador].filter(Boolean).join(" · ") || "—"}
               </span>
             </span>
           </button>
@@ -144,11 +214,15 @@ export default function CrmPanel({
   assessoriaFilter = "all",
   phone = false,
   view,
+  locator = false,
 }) {
   const [crmTab, setCrmTab] = useState(view || "filas");
   useEffect(() => {
     setCrmTab(view || "filas");
   }, [view]);
+  useEffect(() => {
+    if (locator && crmTab !== "filas" && crmTab !== "calendario") setCrmTab("filas");
+  }, [locator, crmTab]);
   const [selectedPlaca, setSelectedPlaca] = useState(null);
   const [newOpen, setNewOpen] = useState(false);
   const [note, setNote] = useState("");
@@ -168,6 +242,11 @@ export default function CrmPanel({
   const [calFormOpen, setCalFormOpen] = useState(false);
   const [dayOpen, setDayOpen] = useState(null); // ISO date YYYY-MM-DD
   const [detailTab, setDetailTab] = useState("resumo");
+  const [addrDraft, setAddrDraft] = useState({});
+  const [addrNew, setAddrNew] = useState("");
+  useEffect(() => {
+    if (locator && detailTab === "pagamento") setDetailTab("resumo");
+  }, [locator, detailTab]);
   const [statusOverrides, setStatusOverrides] = useState({});
   const [patioDates, setPatioDates] = useState({ entrada: "", saida: "", patio: "" });
 
@@ -254,8 +333,8 @@ export default function CrmPanel({
       map.get(key).push(ev);
     };
 
-    const showPay = payFilter === "all" || payFilter === "aberto" || payFilter === "pago";
-    const showOps = payFilter === "all" || payFilter === "operacao";
+    const showPay = !locator && (payFilter === "all" || payFilter === "aberto" || payFilter === "pago");
+    const showOps = locator || payFilter === "all" || payFilter === "operacao";
 
     if (showPay) {
       for (const p of data?.pagamentos || []) {
@@ -280,6 +359,7 @@ export default function CrmPanel({
             placa: item.placa,
             assessoria: item.assessoria,
             localizador: item.localizador,
+            veiculo: item.veiculo,
             pago: false,
             calLabel: "Novo caso",
           });
@@ -292,6 +372,7 @@ export default function CrmPanel({
             placa: item.placa,
             assessoria: item.assessoria,
             localizador: item.localizador,
+            veiculo: item.veiculo,
             pago: false,
             calLabel: item.temMandado ? "MDD" : "Contato",
           });
@@ -303,6 +384,7 @@ export default function CrmPanel({
             placa: item.placa,
             assessoria: item.assessoria,
             localizador: item.localizador,
+            veiculo: item.veiculo,
             pago: false,
             calLabel: "Entrada no pátio",
           });
@@ -314,6 +396,7 @@ export default function CrmPanel({
             placa: item.placa,
             assessoria: item.assessoria,
             localizador: item.localizador,
+            veiculo: item.veiculo,
             pago: false,
             calLabel: "Saída do pátio",
           });
@@ -341,7 +424,7 @@ export default function CrmPanel({
       events.sort((a, b) => (EVENT_ORDER[a.kind] ?? 9) - (EVENT_ORDER[b.kind] ?? 9) || a.placa.localeCompare(b.placa));
     }
     return map;
-  }, [data, payFilter, searchQuery, pipelinePlacas, pipeline]);
+  }, [data, payFilter, searchQuery, pipelinePlacas, pipeline, locator]);
 
   const monthCells = buildMonthMatrix(calCursor.year, calCursor.month);
   const monthLabel = new Date(calCursor.year, calCursor.month, 1).toLocaleDateString("pt-BR", {
@@ -353,6 +436,8 @@ export default function CrmPanel({
     if (!placa) return;
     setSelectedPlaca(placa);
     setDetailTab("resumo");
+    setAddrDraft({});
+    setAddrNew("");
   };
 
   const closeDetail = () => {
@@ -465,12 +550,18 @@ export default function CrmPanel({
       {!view && (
       <div className="crm-toolbar">
         <div className="crm-subnav">
-          {[
-            ["filas", "Filas"],
-            ["followups", "Follow-ups"],
-            ["calendario", "Calendário"],
-            ["patio", "Pátio"],
-          ].map(([id, label]) => (
+          {(locator
+            ? [
+                ["filas", "Filas"],
+                ["calendario", "Calendário"],
+              ]
+            : [
+                ["filas", "Filas"],
+                ["followups", "Follow-ups"],
+                ["calendario", "Calendário"],
+                ["patio", "Pátio"],
+              ]
+          ).map(([id, label]) => (
             <button
               key={id}
               type="button"
@@ -498,18 +589,26 @@ export default function CrmPanel({
       )}
 
       {crmTab === "filas" && phone && (
-        <PhoneFilas statuses={KANBAN_STATUSES} byStatus={byStatus} labels={labels} onOpen={openDetail} />
+        <PhoneFilas
+          statuses={locator ? STATUS_ORDER.filter((s) => s !== "aguardando_pagamento") : KANBAN_STATUSES}
+          byStatus={byStatus}
+          labels={labels}
+          onOpen={openDetail}
+          locator={locator}
+        />
       )}
 
       {crmTab === "filas" && !phone && (
         <>
           <p className="crm-dnd-hint">
-            Toque no card para abrir · arraste pela alça ⋮⋮ para mudar a coluna.
+            {locator
+              ? "Toque no card para ver o caso."
+              : "Toque no card para abrir · arraste pela alça ⋮⋮ para mudar a coluna."}
           </p>
           <div className="crm-kanban">
-            {KANBAN_STATUSES.map((status) => {
+            {(locator ? STATUS_ORDER.filter((s) => s !== "aguardando_pagamento") : KANBAN_STATUSES).map((status) => {
               const items = byStatus[status] || [];
-              if (!items.length && ["inapto"].includes(status)) return null;
+              if (!locator && !items.length && ["inapto"].includes(status)) return null;
               return (
                 <section
                   key={status}
@@ -526,10 +625,11 @@ export default function CrmPanel({
                         key={item.placa}
                         item={item}
                         onOpen={openDetail}
-                        onMoveToStatus={moveToStatus}
+                        onMoveToStatus={locator ? undefined : moveToStatus}
+                        locator={locator}
                       />
                     ))}
-                    {!items.length && <p className="crm-empty-col">Solte aqui</p>}
+                    {!items.length && <p className="crm-empty-col">{locator ? "Nenhum" : "Solte aqui"}</p>}
                   </div>
                 </section>
               );
@@ -598,8 +698,11 @@ export default function CrmPanel({
 
           <div className="crm-cal-actions">
             <p className="section-hint">
-              Toque num dia para ver os eventos: caso novo, contato, pátio e recebimento.
+              {locator
+                ? "Toque num dia para ver os casos: novo, contato e pátio."
+                : "Toque num dia para ver os eventos: caso novo, contato, pátio e recebimento."}
             </p>
+            {!locator && (
             <button
               type="button"
               className="btn btn-primary"
@@ -607,8 +710,10 @@ export default function CrmPanel({
             >
               + Recebimento
             </button>
+            )}
           </div>
 
+          {!locator && (
           <div className="crm-pay-filters">
             {[
               ["all", "Todos"],
@@ -626,8 +731,9 @@ export default function CrmPanel({
               </button>
             ))}
           </div>
+          )}
 
-          {calFormOpen && (
+          {!locator && calFormOpen && (
             <div className="panel panel-soft crm-cal-form">
               <div className="panel-head">
                 <h2>Agendar recebimento</h2>
@@ -776,6 +882,7 @@ export default function CrmPanel({
                     </button>
                   </div>
                   <div className="sheet-body crm-sheet-body">
+                    {!locator && (
                     <button
                       type="button"
                       className="btn btn-primary btn-block"
@@ -787,6 +894,7 @@ export default function CrmPanel({
                     >
                       + Recebimento neste dia
                     </button>
+                    )}
                     <div className="crm-day-list">
                       {(calendarDays.get(dayOpen) || []).map((ev) => (
                         <button
@@ -802,11 +910,13 @@ export default function CrmPanel({
                             {ev.calLabel} · {ev.placa}
                           </strong>
                           <span>
-                            {[ev.assessoria, ev.localizador].filter(Boolean).join(" · ") || "—"}
-                            {ev.kind === "pagamento" && ev.valor != null
+                            {locator
+                              ? ev.veiculo || "—"
+                              : [ev.assessoria, ev.localizador].filter(Boolean).join(" · ") || "—"}
+                            {!locator && ev.kind === "pagamento" && ev.valor != null
                               ? ` · ${formatBRL(ev.valor)}`
                               : ""}
-                            {ev.pago ? " · pago" : ""}
+                            {!locator && ev.pago ? " · pago" : ""}
                           </span>
                         </button>
                       ))}
@@ -881,8 +991,8 @@ export default function CrmPanel({
                   </p>
                   <p className="crm-sheet-meta-line">
                     <span>{selected.localizador || "—"}</span>
-                    {selected.assessoria ? <span> · {selected.assessoria}</span> : null}
-                    {selected.telefone ? (
+                    {!locator && selected.assessoria ? <span> · {selected.assessoria}</span> : null}
+                    {!locator && selected.telefone ? (
                       <>
                         {" · "}
                         <a href={`tel:${selected.telefone.replace(/\D/g, "")}`}>{selected.telefone}</a>
@@ -892,7 +1002,7 @@ export default function CrmPanel({
                   <div className="crm-sheet-chips">
                     {selected.rastreado && <span className="tag-rastreado">Rastreado</span>}
                     {selected.temMandado && <span className="tag-pagamento-pendente">MDD</span>}
-                    {(data?.pendingByPlaca?.[selected.placa] || []).length > 0 && (
+                    {!locator && (data?.pendingByPlaca?.[selected.placa] || []).length > 0 && (
                       <span className="tag-pagamento-pendente">
                         {(data.pendingByPlaca[selected.placa] || []).length} pend.
                       </span>
@@ -905,11 +1015,17 @@ export default function CrmPanel({
               </header>
 
               <div className="crm-detail-tabs" role="tablist">
-                {[
-                  ["resumo", "Dados"],
-                  ["pagamento", "Receber"],
-                  ["historico", "Histórico"],
-                ].map(([id, label]) => (
+                {(locator
+                  ? [
+                      ["resumo", "Dados"],
+                      ["historico", "Histórico"],
+                    ]
+                  : [
+                      ["resumo", "Dados"],
+                      ["pagamento", "Receber"],
+                      ["historico", "Histórico"],
+                    ]
+                ).map(([id, label]) => (
                   <button
                     key={id}
                     type="button"
@@ -939,13 +1055,26 @@ export default function CrmPanel({
                         <dt>Pátio</dt>
                         <dd>{selected.patio || "—"}</dd>
                       </div>
+                      {!locator && (
                       <div>
                         <dt>Diárias</dt>
                         <dd>{selected.diarias ?? "—"}</dd>
                       </div>
+                      )}
                     </dl>
 
-                    {(selected.status === "no_patio" ||
+                    <AddressEditor
+                      placa={selected.placa}
+                      enderecos={data?.enderecos || []}
+                      saving={saving}
+                      draft={addrDraft}
+                      setDraft={setAddrDraft}
+                      addrNew={addrNew}
+                      setAddrNew={setAddrNew}
+                      onSave={(payload) => runAction({ action: "endereco", placa: selected.placa, ...payload })}
+                    />
+
+                    {!locator && (selected.status === "no_patio" ||
                       selected.dataEntradaPatio ||
                       selected.status === "entregue") && (
                       <div className="crm-patio-box">
@@ -1022,6 +1151,8 @@ export default function CrmPanel({
                       </div>
                     )}
 
+                    {!locator && (
+                    <>
                     <div className="crm-toggle-row">
                       <button
                         type="button"
@@ -1083,10 +1214,12 @@ export default function CrmPanel({
                         Enviar ao Controle
                       </button>
                     )}
+                    </>
+                    )}
                   </>
                 )}
 
-                {detailTab === "pagamento" && (
+                {!locator && detailTab === "pagamento" && (
                   <>
                     <div className="filter-row">
                       <div className="filter">
@@ -1190,6 +1323,7 @@ export default function CrmPanel({
 
                 {detailTab === "historico" && (
                   <>
+                    {!locator && (
                     <div className="crm-note-box">
                       <textarea
                         rows={2}
@@ -1214,6 +1348,7 @@ export default function CrmPanel({
                         Salvar
                       </button>
                     </div>
+                    )}
                     <div className="crm-timeline">
                       {timeline.map((t) => (
                         <div key={t.id} className="crm-timeline-item">
@@ -1230,6 +1365,7 @@ export default function CrmPanel({
                 )}
               </div>
 
+              {!locator && (
               <div className="sheet-foot crm-sheet-foot">
                 {(NEXT_STATUS[selected.status] || []).slice(0, 2).map((st) => (
                   <button
@@ -1270,12 +1406,14 @@ export default function CrmPanel({
                   Contato +7d
                 </button>
               </div>
+              )}
             </div>
           </div>,
           document.body,
         )}
 
       <NewOcorrenciaSheet
+        locator={locator}
         open={newOpen}
         onClose={() => setNewOpen(false)}
         onCreate={async (payload) => {

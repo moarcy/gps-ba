@@ -1,3 +1,4 @@
+import { requireAdmin } from "../google-sheets/lib/access-control.js";
 import { addVehicleToGestor } from "../google-sheets/lib/add-vehicle.js";
 
 function readJsonBody(req) {
@@ -11,7 +12,7 @@ function readJsonBody(req) {
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
 
   if (req.method === "OPTIONS") {
     res.status(204).end();
@@ -24,6 +25,7 @@ export default async function handler(req, res) {
   }
 
   try {
+    requireAdmin(req);
     const body = readJsonBody(req);
     const overwrite = Boolean(body.overwrite);
     const result = await addVehicleToGestor(body, { overwrite });

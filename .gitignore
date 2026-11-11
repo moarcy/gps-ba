@@ -14,6 +14,7 @@ dist/
 telegram-radar/data/
 telegram-radar/*.session
 google-sheets/credentials.json
+google-sheets/access-seed.json
 google-sheets/service-account.json
 google-sheets/token.json
 google-sheets/.cache/
@@ -31,6 +32,9 @@ Thumbs.db
 .vscode/*
 !.vscode/extensions.json
 .idea/
+
+# Malha baixada do OpenStreetMap (a rota pronta fica em dashboard/public)
+ruas-jacobina/cache/
 
 # Logs / temp
 *.log

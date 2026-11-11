@@ -4,15 +4,9 @@ import http from "node:http";
 import { URL } from "node:url";
 import { downloadExcel } from "./excel-drive-client.js";
 import { addVehicleToGestor } from "./lib/add-vehicle.js";
-import {
-  addTimelineEvent,
-  createOcorrencia,
-  getCrmData,
-  previewWhatsapp,
-  sendToControle,
-  updateOcorrencia,
-  upsertPagamento,
-} from "./lib/crm-service.js";
+import { actorFromRequest, requireAdmin } from "./lib/access-control.js";
+import { loginWithPassword, listUsers } from "./lib/access-store.js";
+import { dispatchCrmAction, getCrmData, previewWhatsapp } from "./lib/crm-service.js";
 import { buildDashboardPayload } from "./lib/dashboard-data.js";
 import { handleIlocWebhook } from "./lib/iloc-webhook.js";
 import { getLocalizadosData, ingestLocgramHit, updatePosicao } from "./lib/localizados-service.js";
@@ -42,7 +36,7 @@ function sendJson(res, status, body, extraHeaders = {}) {
     "Content-Type": "application/json; charset=utf-8",
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "GET, POST, PATCH, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
     "Cache-Control": "no-store",
     ...extraHeaders,
   });
@@ -87,35 +81,6 @@ async function getDashboardData({ force = false } = {}) {
   return { ...payload, meta: { ...payload.meta, cacheHit: false } };
 }
 
-async function handleCrmPost(body) {
-  const action = body.action || body.op;
-
-  if (action === "preview") {
-    return { status: 200, data: previewWhatsapp(body.text || body.whatsapp || body.rawWhatsapp) };
-  }
-  if (action === "create" || action === "create_ocorrencia") {
-    return { status: 201, data: await createOcorrencia(body) };
-  }
-  if (action === "update" || action === "update_ocorrencia") {
-    const { action: _a, op: _o, placa, ...patch } = body;
-    return { status: 200, data: await updateOcorrencia(placa, patch) };
-  }
-  if (action === "timeline" || action === "add_timeline") {
-    return { status: 201, data: await addTimelineEvent(body) };
-  }
-  if (action === "pagamento" || action === "upsert_pagamento") {
-    return { status: 200, data: await upsertPagamento(body) };
-  }
-  if (action === "bridge" || action === "send_controle") {
-    return { status: 200, data: await sendToControle(body) };
-  }
-
-  const err = new Error(
-    "action inválida. Use: create | update | timeline | pagamento | bridge | preview",
-  );
-  err.status = 400;
-  throw err;
-}
 
 const server = http.createServer(async (req, res) => {
   if (req.method === "OPTIONS") {
@@ -136,7 +101,20 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (url.pathname === "/api/auth/login" && req.method === "POST") {
+      const body = await readJsonBody(req);
+      const session = await loginWithPassword(body.usuario || body.user, body.senha || body.password);
+      sendJson(res, 200, session);
+      return;
+    }
+
+    if (url.pathname === "/api/auth/me" && req.method === "GET") {
+      sendJson(res, 200, { user: actorFromRequest(req) });
+      return;
+    }
+
     if (url.pathname === "/api/dashboard" && req.method === "GET") {
+      requireAdmin(req);
       const force = url.searchParams.get("refresh") === "1";
       const data = await getDashboardData({ force });
       sendJson(res, 200, data);
@@ -144,6 +122,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (url.pathname === "/api/vehicles" && req.method === "POST") {
+      requireAdmin(req);
       const body = await readJsonBody(req);
       const overwrite = Boolean(body.overwrite);
       const result = await addVehicleToGestor(body, { overwrite });
@@ -154,28 +133,36 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (url.pathname === "/api/crm" && req.method === "GET") {
+      const actor = actorFromRequest(req);
       if (url.searchParams.get("preview") === "1") {
+        if (actor.papel !== "admin") {
+          sendJson(res, 403, { error: "Sem permissão." });
+          return;
+        }
         sendJson(res, 200, previewWhatsapp(url.searchParams.get("text") || ""));
         return;
       }
-      sendJson(res, 200, await getCrmData());
+      sendJson(res, 200, await getCrmData(actor));
       return;
     }
 
     if (url.pathname === "/api/crm" && (req.method === "POST" || req.method === "PATCH")) {
+      const actor = actorFromRequest(req);
       const body = await readJsonBody(req);
-      const { status, data } = await handleCrmPost(body);
+      const { status, data } = await dispatchCrmAction(body, actor);
       sendJson(res, status, data);
       return;
     }
 
     if (url.pathname === "/api/localizados" && req.method === "GET") {
+      requireAdmin(req);
       const force = url.searchParams.get("refresh") === "1";
       sendJson(res, 200, await getLocalizadosData({ force }));
       return;
     }
 
     if (url.pathname === "/api/localizados" && (req.method === "POST" || req.method === "PATCH")) {
+      requireAdmin(req);
       const body = await readJsonBody(req);
       const action = body.action || body.op;
       if (action === "ingest" || action === "locgram") {
@@ -187,16 +174,19 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (url.pathname === "/api/radar" && req.method === "GET") {
+      requireAdmin(req);
       sendJson(res, 200, await getRadarData());
       return;
     }
 
     if (url.pathname === "/api/nfse" && req.method === "GET") {
+      requireAdmin(req);
       sendJson(res, 200, await getNfseData());
       return;
     }
 
     if (url.pathname === "/api/nfse" && req.method === "POST") {
+      requireAdmin(req);
       const body = await readJsonBody(req);
       const action = body.action || body.op || "emit";
 
@@ -226,7 +216,17 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, "127.0.0.1", () => {
   console.log(`GPS BA Dashboard API → http://127.0.0.1:${PORT}`);
+  console.log(`  POST /api/auth/login`);
+  console.log(`  GET  /api/auth/me`);
   console.log(`  GET  /api/health`);
+  listUsers()
+    .then((users) => {
+      const nomes = users.map((user) => user.usuario).join(", ");
+      console.log(`  Acessos: ${nomes || "nenhum"}`);
+    })
+    .catch((error) => {
+      console.error("Acessos:", error.message || error);
+    });
   console.log(`  GET  /api/dashboard`);
   console.log(`  GET  /api/radar`);
   console.log(`  GET  /api/crm`);

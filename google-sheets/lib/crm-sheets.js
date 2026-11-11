@@ -1,8 +1,12 @@
 import {
+  ACESSOS_HEADERS,
+  CRM_ACESSOS_SHEET,
+  CRM_ENDERECOS_SHEET,
   CRM_PAGAMENTOS_SHEET,
   CRM_PIPELINE_SHEET,
   CRM_TIMELINE_SHEET,
   DATA_START,
+  ENDERECOS_HEADERS,
   HEADER_ROW,
   ILOC_EVENTOS_HEADERS,
   ILOC_EVENTOS_SHEET,
@@ -138,10 +142,14 @@ function migratePagamentosLayout(ws) {
 }
 
 export function ensureCrmSheets(workbook) {
+  const acessos = ensureSheet(workbook, CRM_ACESSOS_SHEET, ACESSOS_HEADERS);
+  acessos.getColumn(2).numFmt = "@";
   return {
     pipeline: ensureSheet(workbook, CRM_PIPELINE_SHEET, PIPELINE_HEADERS),
     timeline: ensureSheet(workbook, CRM_TIMELINE_SHEET, TIMELINE_HEADERS),
     pagamentos: ensureSheet(workbook, CRM_PAGAMENTOS_SHEET, PAGAMENTO_HEADERS),
+    enderecos: ensureSheet(workbook, CRM_ENDERECOS_SHEET, ENDERECOS_HEADERS),
+    acessos,
   };
 }
 
@@ -322,6 +330,114 @@ export function upsertPipelineRow(ws, record) {
     return last + 1;
   })();
   writeRowByHeaders(ws, rowNumber, PIPELINE_HEADERS, pipelineToSheetRow(record));
+  return rowNumber;
+}
+
+function asSenha(value) {
+  if (value == null || value === "") return "";
+  if (typeof value === "number" && Number.isFinite(value)) return String(Math.trunc(value));
+  return String(value).trim();
+}
+
+export function readAcessos(ws) {
+  const items = [];
+  if (!ws) return items;
+  for (let r = DATA_START; r <= ws.rowCount; r++) {
+    const raw = readRowByHeaders(ws, r, ACESSOS_HEADERS);
+    const usuario = normalizeText(raw.usuario).toLowerCase();
+    if (!usuario) continue;
+    const papel = normalizeText(raw.papel).toLowerCase() === "admin" ? "admin" : "localizador";
+    items.push({
+      usuario,
+      senha: asSenha(raw.senha),
+      papel,
+      localizador: papel === "admin" ? "" : normalizeLocalizador(raw.localizador),
+    });
+  }
+  return items;
+}
+
+export function appendAcesso(ws, user) {
+  let last = DATA_START - 1;
+  for (let r = DATA_START; r <= ws.rowCount; r++) {
+    if (normalizeText(cellValue(ws.getCell(r, 1)))) last = r;
+  }
+  const rowNumber = last + 1;
+  writeRowByHeaders(ws, rowNumber, ACESSOS_HEADERS, {
+    usuario: user.usuario,
+    senha: String(user.senha ?? ""),
+    papel: user.papel,
+    localizador: user.localizador || "",
+  });
+  const senhaCell = ws.getRow(rowNumber).getCell(2);
+  senhaCell.value = String(user.senha ?? "");
+  senhaCell.numFmt = "@";
+}
+
+export function ensureAccessUsers(ws, seed = []) {
+  const current = readAcessos(ws);
+  const have = new Set(current.map((u) => u.usuario));
+  let added = 0;
+  for (const raw of seed) {
+    const usuario = normalizeText(raw.usuario).toLowerCase();
+    const senha = raw.senha == null ? "" : String(raw.senha);
+    const papel = normalizeText(raw.papel).toLowerCase() === "admin" ? "admin" : "localizador";
+    const localizador = papel === "admin" ? "" : normalizeLocalizador(raw.localizador);
+    if (!usuario || !senha || have.has(usuario)) continue;
+    if (papel === "localizador" && !localizador) continue;
+    appendAcesso(ws, { usuario, senha, papel, localizador });
+    have.add(usuario);
+    added += 1;
+  }
+  return added;
+}
+
+export function readEnderecos(ws) {
+  const items = [];
+  if (!ws) return items;
+  for (let r = DATA_START; r <= ws.rowCount; r++) {
+    const raw = readRowByHeaders(ws, r, ENDERECOS_HEADERS);
+    const placa = normalizePlaca(raw.placa);
+    const ordem = Number(raw.ordem);
+    if (!placa || !Number.isInteger(ordem) || ordem < 1) continue;
+    items.push({
+      id: normalizeText(raw.id) || `e-${r}`,
+      placa,
+      ordem,
+      texto: normalizeText(raw.texto),
+      atualizadoEm: toIsoDateTime(raw.atualizado_em),
+      atualizadoPor: normalizeText(raw.atualizado_por),
+      _row: r,
+    });
+  }
+  return items.sort((a, b) => a.placa.localeCompare(b.placa) || a.ordem - b.ordem);
+}
+
+export function upsertEnderecoRow(ws, record) {
+  let rowNumber = null;
+  for (let r = DATA_START; r <= ws.rowCount; r++) {
+    const placa = normalizePlaca(cellValue(ws.getCell(r, 2)));
+    const ordem = Number(cellValue(ws.getCell(r, 3)));
+    if (placa === record.placa && ordem === record.ordem) {
+      rowNumber = r;
+      break;
+    }
+  }
+  if (!rowNumber) {
+    let last = DATA_START - 1;
+    for (let r = DATA_START; r <= ws.rowCount; r++) {
+      if (normalizePlaca(cellValue(ws.getCell(r, 2)))) last = r;
+    }
+    rowNumber = last + 1;
+  }
+  writeRowByHeaders(ws, rowNumber, ENDERECOS_HEADERS, {
+    id: record.id,
+    placa: record.placa,
+    ordem: record.ordem,
+    texto: record.texto,
+    atualizado_em: record.atualizadoEm,
+    atualizado_por: record.atualizadoPor || "",
+  });
   return rowNumber;
 }
 

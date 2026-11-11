@@ -1,6 +1,8 @@
 export const CRM_PIPELINE_SHEET = "CRM Pipeline";
 export const CRM_TIMELINE_SHEET = "CRM Timeline";
 export const CRM_PAGAMENTOS_SHEET = "CRM Pagamentos";
+export const CRM_ENDERECOS_SHEET = "CRM Endereços";
+export const CRM_ACESSOS_SHEET = "CRM Acessos";
 export const ILOC_EVENTOS_SHEET = "iLoc Eventos";
 
 export const CRM_STATUSES = [
@@ -75,6 +77,17 @@ export const PIPELINE_HEADERS = [
 export const TIMELINE_HEADERS = ["id", "data_hora", "placa", "tipo", "mensagem"];
 
 export const ILOC_EVENTOS_HEADERS = ["id", "ocorrido_em", "tipo", "placa", "entrega", "recebido_em"];
+
+export const ENDERECOS_HEADERS = [
+  "id",
+  "placa",
+  "ordem",
+  "texto",
+  "atualizado_em",
+  "atualizado_por",
+];
+
+export const ACESSOS_HEADERS = ["usuario", "senha", "papel", "localizador"];
 
 export const PAGAMENTO_HEADERS = [
   "id",

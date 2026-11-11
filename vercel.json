@@ -19,6 +19,14 @@
       "memory": 1024,
       "maxDuration": 60
     },
+    "api/auth/login.js": {
+      "memory": 1024,
+      "maxDuration": 60
+    },
+    "api/auth/me.js": {
+      "memory": 1024,
+      "maxDuration": 30
+    },
     "api/nfse.js": {
       "memory": 1024,
       "maxDuration": 300

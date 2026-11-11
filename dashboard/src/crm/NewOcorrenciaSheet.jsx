@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import { apiFetch } from "../lib/api";
 
 const EMPTY = {
   placa: "",
@@ -17,10 +18,11 @@ const EMPTY = {
   overwrite: false,
 };
 
-export default function NewOcorrenciaSheet({ open, onClose, onCreate }) {
+export default function NewOcorrenciaSheet({ open, onClose, onCreate, locator = false }) {
   const [mode, setMode] = useState("whatsapp");
   const [paste, setPaste] = useState("");
   const [form, setForm] = useState(EMPTY);
+  const [endereco, setEndereco] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -29,6 +31,7 @@ export default function NewOcorrenciaSheet({ open, onClose, onCreate }) {
     setMode("whatsapp");
     setPaste("");
     setError("");
+    setEndereco("");
     setForm({ ...EMPTY, dataOcorrencia: new Date().toISOString().slice(0, 10) });
   }, [open]);
 
@@ -39,7 +42,7 @@ export default function NewOcorrenciaSheet({ open, onClose, onCreate }) {
   const parsePaste = async () => {
     setError("");
     try {
-      const res = await fetch("/api/crm", {
+      const res = await apiFetch("/api/crm", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "preview", text: paste }),
@@ -72,12 +75,17 @@ export default function NewOcorrenciaSheet({ open, onClose, onCreate }) {
       setError("Informe a placa.");
       return;
     }
+    if (locator && !endereco.trim()) {
+      setError("Informe o endereço.");
+      return;
+    }
     setSaving(true);
     try {
-      await onCreate({
-        ...form,
-        rawWhatsapp: form.rawWhatsapp || paste,
-      });
+      await onCreate(
+        locator
+          ? { placa: form.placa, endereco: endereco.trim() }
+          : { ...form, rawWhatsapp: form.rawWhatsapp || paste },
+      );
       onClose();
     } catch (err) {
       setError(err.message || "Falha ao salvar");
@@ -99,6 +107,35 @@ export default function NewOcorrenciaSheet({ open, onClose, onCreate }) {
         </div>
 
         <div className="sheet-body add-form">
+          {locator ? (
+            <form onSubmit={submit}>
+              <p className="section-hint">A placa e o endereço entram na sua fila. O escritório completa o restante.</p>
+              <div className="filter">
+                <label htmlFor="crm-placa">Placa *</label>
+                <input
+                  id="crm-placa"
+                  value={form.placa}
+                  onChange={(e) => setField("placa", e.target.value.toUpperCase())}
+                  required
+                />
+              </div>
+              <div className="filter">
+                <label htmlFor="crm-endereco">Endereço *</label>
+                <textarea
+                  id="crm-endereco"
+                  rows={3}
+                  value={endereco}
+                  onChange={(e) => setEndereco(e.target.value)}
+                  required
+                />
+              </div>
+              {error && <p className="form-error">{error}</p>}
+              <button className="btn btn-primary btn-block" type="submit" disabled={saving}>
+                {saving ? "Salvando…" : "Salvar ocorrência"}
+              </button>
+            </form>
+          ) : (
+          <>
           <div className="crm-mode-tabs">
             <button
               type="button"
@@ -248,6 +285,8 @@ export default function NewOcorrenciaSheet({ open, onClose, onCreate }) {
                 {saving ? "Salvando…" : "Salvar ocorrência"}
               </button>
             </form>
+          )}
+          </>
           )}
         </div>
       </div>

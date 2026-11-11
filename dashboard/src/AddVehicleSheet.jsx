@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { apiFetch } from "./lib/api";
 
 const EMPTY_FORM = {
   placa: "",
@@ -56,7 +57,7 @@ export default function AddVehicleSheet({ open, onClose, onSaved, filters }) {
 
     setSaving(true);
     try {
-      const res = await fetch("/api/vehicles", {
+      const res = await apiFetch("/api/vehicles", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),

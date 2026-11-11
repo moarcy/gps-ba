@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
+import { apiFetch } from "../lib/api";
 
 async function localizadosFetch(url, options = {}) {
-  const res = await fetch(url, options);
+  const res = await apiFetch(url, options);
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
   return body;

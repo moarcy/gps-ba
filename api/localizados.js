@@ -1,3 +1,4 @@
+import { requireAdmin } from "../google-sheets/lib/access-control.js";
 import { getLocalizadosData, ingestLocgramHit, updatePosicao } from "../google-sheets/lib/localizados-service.js";
 
 function readJsonBody(req) {
@@ -11,7 +12,7 @@ function readJsonBody(req) {
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, PATCH, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
 
   if (req.method === "OPTIONS") {
     res.status(204).end();
@@ -19,6 +20,7 @@ export default async function handler(req, res) {
   }
 
   try {
+    requireAdmin(req);
     if (req.method === "GET") {
       const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
       const force = url.searchParams.get("refresh") === "1";
