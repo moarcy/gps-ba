@@ -44,17 +44,20 @@ export function parseWhatsappOcorrencia(rawText) {
       .replace(/^\s*[-–—]\s*/, "")
       .trim();
 
-    const corMatch = rest.match(/COR:\s*(.+?)(?=\s+ORIGEM:|\s+UF:|$)/i);
-    const origemMatch = rest.match(/ORIGEM:\s*(.+?)(?=\s+UF:|$)/i);
+    const corMatch = rest.match(/COR:\s*(.+?)(?=\s+COMARCA:|\s+ORIGEM:|\s+UF:|$)/i);
+    const origemMatch = rest.match(/(?:COMARCA|ORIGEM):\s*(.+?)(?=\s+UF:|$)/i);
     const ufMatch = rest.match(/\bUF:\s*([A-Z]{2})\b/i);
 
-    if (corMatch) fields.cor = normalizeText(corMatch[1]);
+    if (corMatch) {
+      const rawCor = normalizeText(corMatch[1]);
+      if (rawCor && !/^(comarca|origem|uf)\b/i.test(rawCor)) fields.cor = rawCor;
+    }
     if (origemMatch) fields.origem = normalizeText(origemMatch[1]);
     if (ufMatch) fields.uf = normalizeText(ufMatch[1]).toUpperCase();
 
     fields.veiculo = rest
       .replace(/\s*COR:\s*.+$/i, "")
-      .replace(/\s*ORIGEM:\s*.+$/i, "")
+      .replace(/\s*(?:COMARCA|ORIGEM):\s*.+$/i, "")
       .replace(/\s*UF:\s*[A-Z]{2}\b.*$/i, "")
       .trim();
   }

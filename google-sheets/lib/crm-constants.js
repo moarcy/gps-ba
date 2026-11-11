@@ -72,6 +72,8 @@ export const PIPELINE_HEADERS = [
   "raw_whatsapp",
   "no_controle",
   "atualizado_em",
+  "localizado",
+  "processo",
 ];
 
 export const TIMELINE_HEADERS = ["id", "data_hora", "placa", "tipo", "mensagem"];

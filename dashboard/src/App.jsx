@@ -19,6 +19,7 @@ import { useNfse } from "./hooks/useNfse";
 import { useRadar } from "./hooks/useRadar";
 import { formatBRL, formatDate } from "./lib/format";
 import MobileApp from "./mobile/MobileApp";
+import JacobinaPanel from "./jacobina/JacobinaPanel";
 import LocalizadosPanel from "./localizados/LocalizadosPanel";
 import NfsePanel from "./nfse/NfsePanel";
 import RadarPanel from "./radar/RadarPanel";
@@ -431,7 +432,7 @@ export default function App({ user, onLogout }) {
     );
   }
 
-  if (!locator && tab !== "feira" && loading && !data) {
+  if (!locator && tab !== "feira" && tab !== "ruas" && loading && !data) {
     return (
       <div className="app app-shell">
         <header className="app-header">
@@ -449,7 +450,7 @@ export default function App({ user, onLogout }) {
     );
   }
 
-  if (!locator && tab !== "feira" && error && !data) {
+  if (!locator && tab !== "feira" && tab !== "ruas" && error && !data) {
     return (
       <div className="app state-screen">
         <div className="state-card">
@@ -462,6 +463,13 @@ export default function App({ user, onLogout }) {
           </p>
           <button className="btn btn-primary btn-block" type="button" onClick={() => reload()}>
             Tentar de novo
+          </button>
+          <button
+            className="btn btn-ghost btn-block"
+            type="button"
+            onClick={() => setTab("ruas")}
+          >
+            Abrir ruas de Jacobina
           </button>
           <button
             className="btn btn-ghost btn-block"
@@ -565,7 +573,7 @@ export default function App({ user, onLogout }) {
             <p className="brand-sub hide-mobile">{locator ? user.localizador : "Controle de Diligências"}</p>
           </div>
           <div className="header-actions">
-            {!locator && tab !== "local" && tab !== "feira" && (
+            {!locator && tab !== "local" && tab !== "feira" && tab !== "ruas" && (
               <button
                 type="button"
                 className="icon-btn"
@@ -575,7 +583,7 @@ export default function App({ user, onLogout }) {
                 <IconPlus />
               </button>
             )}
-            {!locator && tab !== "nfse" && tab !== "local" && tab !== "feira" && (
+            {!locator && tab !== "nfse" && tab !== "local" && tab !== "feira" && tab !== "ruas" && (
               <button
                 type="button"
                 className="icon-btn icon-btn-filters"
@@ -617,7 +625,7 @@ export default function App({ user, onLogout }) {
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder={
-              tab === "crm"
+              tab === "crm" || (locator && tab === "calendario")
                 ? locator
                   ? "Buscar placa ou veículo…"
                   : "Buscar no CRM: placa, loc, assessoria, status…"
@@ -627,7 +635,9 @@ export default function App({ user, onLogout }) {
                     ? "Buscar placa no lote…"
                     : tab === "feira"
                       ? "Buscar placa no radar Feira…"
-                      : "Buscar placa, assessoria, banco, loc…"
+                      : tab === "ruas"
+                        ? "Buscar rua ou bairro em Jacobina…"
+                        : "Buscar placa, assessoria, banco, loc…"
             }
             enterKeyHint="search"
             aria-label="Buscar"
@@ -636,10 +646,14 @@ export default function App({ user, onLogout }) {
 
         <nav className="desktop-nav desktop-only" aria-label="Navegação principal">
           {(locator
-            ? [["crm", "CRM"]]
+            ? [
+                ["crm", "Filas"],
+                ["calendario", "Calendário"],
+              ]
             : [
                 ["resumo", "Resumo"],
                 ["local", "Local"],
+                ["ruas", "Ruas"],
                 ["feira", "Feira"],
                 ["crm", "CRM"],
                 ["nfse", "NFS-e"],
@@ -661,7 +675,7 @@ export default function App({ user, onLogout }) {
 
       <main className={`tab-panels tab-${tab}`}>
         {!locator && (
-        <section className={`filters desktop-filters desktop-only${tab === "nfse" || tab === "local" || tab === "feira" ? " is-hidden" : ""}`}>{filtersForm}</section>
+        <section className={`filters desktop-filters desktop-only${tab === "nfse" || tab === "local" || tab === "feira" || tab === "ruas" ? " is-hidden" : ""}`}>{filtersForm}</section>
         )}
 
         {!locator && <>
@@ -913,6 +927,10 @@ export default function App({ user, onLogout }) {
           />
         </section>
 
+        <section className={`tab-panel ${tab === "ruas" ? "is-active" : ""}`}>
+          <JacobinaPanel searchQuery={q} active={tab === "ruas"} />
+        </section>
+
         {/* Radar Feira / Telegram */}
         <section className={`tab-panel ${tab === "feira" ? "is-active" : ""}`}>
           <RadarPanel
@@ -928,8 +946,9 @@ export default function App({ user, onLogout }) {
         </>}
 
         {/* CRM */}
-        <section className={`tab-panel ${tab === "crm" ? "is-active" : ""}`}>
+        <section className={`tab-panel ${tab === "crm" || (locator && tab === "calendario") ? "is-active" : ""}`}>
           <CrmPanel
+            view={locator && tab === "calendario" ? "calendario" : undefined}
             data={crm.data}
             loading={crm.loading}
             error={crm.error}

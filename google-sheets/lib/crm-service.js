@@ -151,6 +151,8 @@ function occFromControle(c) {
     localizador: loc,
     status: "no_patio",
     rastreado: false,
+    localizado: false,
+    processo: "",
     temMandado: false,
     usaGuincho: false,
     patio,
@@ -382,6 +384,8 @@ function mergeOcorrenciaBody(body = {}) {
     localizador: normalizeLocalizador(fields.localizador),
     status: CRM_STATUSES.includes(fields.status) ? fields.status : "nova",
     rastreado: Boolean(fields.rastreado),
+    localizado: Boolean(fields.localizado),
+    processo: normalizeText(fields.processo),
     temMandado: Boolean(fields.temMandado),
     usaGuincho: Boolean(fields.usaGuincho),
     patio: resolvePatio({
@@ -430,7 +434,7 @@ export async function createOcorrencia(body) {
   });
 }
 
-export async function updateOcorrencia(placaInput, patch = {}) {
+export async function updateOcorrencia(placaInput, patch = {}, actor = null) {
   const placa = normalizePlaca(placaInput);
   if (!placa) {
     const err = new Error("Placa inválida.");
@@ -447,6 +451,20 @@ export async function updateOcorrencia(placaInput, patch = {}) {
       throw err;
     }
 
+    if (actor?.papel === "localizador") {
+      if (!sameLocalizador(current.localizador, actor.localizador)) {
+        const err = new Error("Placa não encontrada na sua fila.");
+        err.status = 404;
+        throw err;
+      }
+      const allowed = Object.keys(patch).every((key) => key === "rastreado" || key === "localizado");
+      if (!allowed || !Object.keys(patch).length) {
+        const err = new Error("Sem permissão.");
+        err.status = 403;
+        throw err;
+      }
+    }
+
     const next = { ...current };
     const assignable = [
       "veiculo",
@@ -455,6 +473,7 @@ export async function updateOcorrencia(placaInput, patch = {}) {
       "telefone",
       "observacoes",
       "rawWhatsapp",
+      "processo",
     ];
     for (const key of assignable) {
       if (patch[key] !== undefined) next[key] = normalizeText(patch[key]);
@@ -471,6 +490,7 @@ export async function updateOcorrencia(placaInput, patch = {}) {
     }
     if (patch.uf !== undefined) next.uf = normalizeText(patch.uf).toUpperCase();
     if (patch.rastreado !== undefined) next.rastreado = Boolean(patch.rastreado);
+    if (patch.localizado !== undefined) next.localizado = Boolean(patch.localizado);
     if (patch.temMandado !== undefined) {
       const was = Boolean(current.temMandado);
       next.temMandado = Boolean(patch.temMandado);
@@ -557,6 +577,15 @@ export async function updateOcorrencia(placaInput, patch = {}) {
     next.atualizadoEm = new Date().toISOString();
     upsertPipelineRow(sheets.pipeline, next);
 
+    const flagNotes = [];
+    if (patch.rastreado !== undefined && Boolean(current.rastreado) !== Boolean(next.rastreado)) {
+      flagNotes.push(next.rastreado ? "Marcado como rastreado" : "Rastreado desmarcado");
+    }
+    if (patch.localizado !== undefined && Boolean(current.localizado) !== Boolean(next.localizado)) {
+      flagNotes.push(next.localizado ? "Marcado como localizado" : "Localizado desmarcado");
+    }
+    const flagOnly = Object.keys(patch).every((key) => key === "rastreado" || key === "localizado");
+
     if (patch.status && patch.status !== prevStatus) {
       const requested = patch.status;
       let mensagem = `Status: ${CRM_STATUS_LABELS[prevStatus] || prevStatus} → ${CRM_STATUS_LABELS[next.status] || next.status}`;
@@ -568,6 +597,12 @@ export async function updateOcorrencia(placaInput, patch = {}) {
         tipo: "status",
         mensagem,
       });
+    } else if (flagOnly && flagNotes.length) {
+      appendTimelineRow(sheets.timeline, {
+        placa,
+        tipo: "nota",
+        mensagem: flagNotes.join(" · "),
+      });
     } else if (Object.keys(patch).length) {
       appendTimelineRow(sheets.timeline, {
         placa,
@@ -576,7 +611,10 @@ export async function updateOcorrencia(placaInput, patch = {}) {
       });
     }
 
-    return { ok: true, ocorrencia: next };
+    return {
+      ok: true,
+      ocorrencia: actor?.papel === "localizador" ? publicLocalizadorCar(next) : next,
+    };
   });
 }
 
@@ -776,6 +814,8 @@ export async function createLocalizadorOcorrencia({ placa, endereco, localizador
       localizador: loc,
       status: "nova",
       rastreado: false,
+      localizado: false,
+      processo: "",
       temMandado: false,
       usaGuincho: false,
       patio: "",
@@ -910,6 +950,12 @@ export async function dispatchCrmAction(body = {}, actor) {
           actor,
         }),
       };
+    }
+    if (action === "update" || action === "update_ocorrencia") {
+      const patch = {};
+      if (body.rastreado !== undefined) patch.rastreado = body.rastreado;
+      if (body.localizado !== undefined) patch.localizado = body.localizado;
+      return { status: 200, data: await updateOcorrencia(body.placa, patch, actor) };
     }
     throw httpError("Sem permissão.", 403);
   }

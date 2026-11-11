@@ -223,7 +223,7 @@
   bottom: 0;
   z-index: 30;
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   padding: 4px 4px calc(4px + var(--safe-bottom));
   background: rgba(22, 28, 35, 0.94);
   backdrop-filter: blur(18px);

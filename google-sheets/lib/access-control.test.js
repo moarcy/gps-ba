@@ -35,6 +35,9 @@ const payload = {
       observacoes: "pagar pix",
       veiculo: "GOL",
       patio: "Ponto a Ponto",
+      rastreado: true,
+      localizado: false,
+      processo: "8009673-91.2023.8.05.0022",
     },
     {
       placa: "BBB1B23",
@@ -72,6 +75,9 @@ test("localizador não recebe pagamento, assessoria, telefone nem carro de outro
   assert.equal(scoped.pipeline[0].placa, "ABC1D23");
   assert.equal(scoped.pipeline[0].status, "no_patio");
   assert.equal(scoped.pipeline[0].veiculo, "GOL");
+  assert.equal(scoped.pipeline[0].rastreado, true);
+  assert.equal(scoped.pipeline[0].localizado, false);
+  assert.equal(scoped.pipeline[0].processo, "8009673-91.2023.8.05.0022");
   assert.equal("assessoria" in scoped.pipeline[0], false);
   assert.equal("telefone" in scoped.pipeline[0], false);
   assert.equal("valorDiaria" in scoped.pipeline[0], false);

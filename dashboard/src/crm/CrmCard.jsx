@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { formatShortDate } from "./status";
+import { vehicleFacts } from "./vehicle-facts";
 
 function statusFromPoint(clientX, clientY) {
   const cols = document.querySelectorAll("[data-crm-status]");
@@ -240,6 +241,8 @@ export default function CrmCard({ item, onOpen, onMoveToStatus, locator = false 
     onOpenRef.current?.(itemRef.current.placa);
   };
 
+  const facts = vehicleFacts(item);
+
   return (
     <article ref={cardRef} className="crm-card" data-placa={item.placa}>
       {!locator && (
@@ -272,18 +275,25 @@ export default function CrmCard({ item, onOpen, onMoveToStatus, locator = false 
         <div className="crm-card-top">
           <strong className="placa">{item.placa}</strong>
         </div>
-        {item.rastreado && <span className="tag-rastreado">Rastreado</span>}
+        {(item.rastreado || item.localizado) && (
+          <div className="crm-row-tags">
+            {item.rastreado && <span className="tag-rastreado">Rastreado</span>}
+            {item.localizado && <span className="tag-localizado">Localizado</span>}
+          </div>
+        )}
         <p className="crm-card-sub">
-          {locator ? item.veiculo || "Sem descrição" : item.assessoria || "Sem assessoria"}
+          {locator ? facts.veiculo || "Sem descrição" : item.assessoria || "Sem assessoria"}
         </p>
         <p className="crm-card-meta">
           {locator
-            ? [item.cor, item.uf].filter(Boolean).join(" · ") || "—"
+            ? [facts.cor, facts.comarca, facts.uf].filter(Boolean).join(" · ") || "—"
             : [item.localizador, item.veiculo].filter(Boolean).join(" · ") || "—"}
         </p>
-        <div className="crm-card-foot">
-          <span>Contato {formatShortDate(item.proximoContato)}</span>
-        </div>
+        {!locator && (
+          <div className="crm-card-foot">
+            <span>Contato {formatShortDate(item.proximoContato)}</span>
+          </div>
+        )}
       </div>
     </article>
   );

@@ -1,0 +1,313 @@
+.jacobina {
+  display: grid;
+  gap: 14px;
+}
+
+.jacobina-kicker {
+  margin: 0 0 4px;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #e6c36a;
+}
+
+.jacobina h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  font-weight: 600;
+}
+
+.jacobina-sub {
+  margin: 6px 0 0;
+  color: var(--sand-dim);
+  font-size: 0.92rem;
+  max-width: 68ch;
+}
+
+.jacobina-kpis {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.jacobina-kpis article {
+  background: rgba(230, 195, 106, 0.08);
+  border: 1px solid rgba(230, 195, 106, 0.22);
+  border-radius: 14px;
+  padding: 12px;
+}
+
+.jacobina-kpis span {
+  display: block;
+  color: var(--sand-dim);
+  font-size: 0.72rem;
+}
+
+.jacobina-kpis strong {
+  font-size: 1.2rem;
+  font-weight: 650;
+}
+
+.jacobina-layout {
+  display: grid;
+  grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.jacobina-map-col {
+  grid-column: 2;
+  grid-row: 1;
+  display: grid;
+  gap: 12px;
+}
+
+.jacobina-list {
+  grid-column: 1;
+  grid-row: 1;
+  display: grid;
+  gap: 10px;
+}
+
+.jacobina-map-wrap {
+  position: relative;
+  isolation: isolate;
+}
+
+.jacobina-map {
+  position: relative;
+  z-index: 0;
+  height: min(72vh, 760px);
+  min-height: 420px;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  background: #141a21;
+}
+
+.jacobina-map.leaflet-container {
+  font-family: var(--font-body);
+}
+
+.jacobina-tiles {
+  filter: saturate(0.4) brightness(0.78);
+}
+
+.jacobina-gps {
+  position: absolute;
+  z-index: 2;
+  top: 10px;
+  right: 10px;
+  display: grid;
+  gap: 6px;
+  width: min(240px, calc(100% - 20px));
+  padding: 8px;
+  border-radius: 14px;
+  background: rgba(15, 20, 25, 0.9);
+  border: 1px solid var(--line);
+}
+
+.jacobina-gps .jacobina-note {
+  margin: 0;
+}
+
+.jacobina-legend {
+  position: absolute;
+  z-index: 2;
+  left: 10px;
+  bottom: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: rgba(15, 20, 25, 0.88);
+  border: 1px solid var(--line);
+  font-size: 0.75rem;
+}
+
+.jacobina-legend i {
+  display: inline-block;
+  width: 14px;
+  height: 4px;
+  margin-right: 6px;
+  border-radius: 4px;
+  vertical-align: middle;
+}
+
+.casa-pin {
+  background: transparent;
+  border: 0;
+}
+
+.casa-pin span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 22px;
+  border-radius: 999px;
+  background: #b87a7a;
+  color: white;
+  border: 2px solid #fff;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.jacobina-tools {
+  display: flex;
+  gap: 8px;
+}
+
+.jacobina-tools select {
+  flex: 1;
+  min-width: 0;
+  background: var(--ink-2);
+  border: 1px solid var(--line);
+  color: var(--sand);
+  border-radius: 12px;
+  padding: 10px 12px;
+  min-height: 44px;
+}
+
+.jacobina-next,
+.jacobina-day,
+.jacobina-row {
+  text-align: left;
+  border: 1px solid var(--line);
+  background: var(--card);
+  border-radius: 14px;
+  padding: 12px;
+}
+
+.jacobina-next {
+  border-color: rgba(230, 195, 106, 0.45);
+  background: rgba(230, 195, 106, 0.08);
+}
+
+.jacobina-next strong,
+.jacobina-day strong,
+.jacobina-row strong {
+  display: block;
+}
+
+.jacobina-meta {
+  display: block;
+  margin-top: 4px;
+  color: var(--sand-dim);
+  font-size: 0.82rem;
+}
+
+.jacobina-days {
+  display: grid;
+  gap: 8px;
+  max-height: min(72vh, 760px);
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.jacobina-row {
+  width: 100%;
+}
+
+.jacobina-row.is-on {
+  border-color: rgba(230, 195, 106, 0.7);
+}
+
+.jacobina-row-top,
+.jacobina-street {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.jacobina-pill {
+  flex: 0 0 auto;
+  font-size: 0.72rem;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--sand-dim);
+}
+
+.jacobina-pill.is-done {
+  background: rgba(125, 206, 160, 0.16);
+  color: #b7ebc9;
+}
+
+.jacobina-pill.is-partial {
+  background: rgba(230, 195, 106, 0.16);
+  color: #f4e2a8;
+}
+
+.jacobina-track {
+  margin-top: 8px;
+  height: 4px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+}
+
+.jacobina-track span {
+  display: block;
+  height: 100%;
+  background: #7dcea0;
+}
+
+.jacobina-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.jacobina-actions .btn-primary {
+  grid-column: 1 / -1;
+}
+
+.jacobina-ruas {
+  display: grid;
+  gap: 6px;
+  max-height: 280px;
+  overflow: auto;
+}
+
+.jacobina-street {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.jacobina-street.is-done {
+  color: #b7ebc9;
+}
+
+.jacobina-note {
+  margin: 0;
+  color: var(--sand-dim);
+  font-size: 0.82rem;
+}
+
+@media (max-width: 900px) {
+  .jacobina-kpis {
+    grid-template-columns: 1fr;
+  }
+
+  .jacobina-layout,
+  .jacobina-map-col,
+  .jacobina-list {
+    grid-column: 1;
+    grid-row: auto;
+  }
+
+  .jacobina-map {
+    height: 48vh;
+    min-height: 280px;
+  }
+
+  .jacobina-days {
+    max-height: none;
+  }
+}

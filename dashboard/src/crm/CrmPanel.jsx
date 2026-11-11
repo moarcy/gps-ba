@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { formatBRL } from "../lib/format";
 import CrmCard from "./CrmCard";
+import { vehicleFacts } from "./vehicle-facts";
 import NewOcorrenciaSheet from "./NewOcorrenciaSheet";
 import {
   NEXT_STATUS,
@@ -78,6 +79,8 @@ function matchesCrmSearch(item, query, labels = {}) {
     item.status,
     labels[item.status],
     item.rastreado ? "RASTREADO" : "",
+    item.localizado ? "LOCALIZADO" : "",
+    item.processo,
     item.temMandado ? "MANDADO" : "",
     item.observacoes,
   ]
@@ -191,10 +194,16 @@ function PhoneFilas({ statuses, byStatus, labels, onOpen, locator = false }) {
               <strong className="placa">{item.placa}</strong>
               <span className="phone-sub">
                 {locator
-                  ? item.veiculo || "—"
+                  ? vehicleFacts(item).veiculo || "—"
                   : [item.assessoria, item.localizador].filter(Boolean).join(" · ") || "—"}
               </span>
             </span>
+            {(item.rastreado || item.localizado) && (
+              <span className="crm-row-tags">
+                {item.rastreado && <span className="tag-rastreado">Rastreado</span>}
+                {item.localizado && <span className="tag-localizado">Localizado</span>}
+              </span>
+            )}
           </button>
         ))}
       </div>
@@ -244,6 +253,7 @@ export default function CrmPanel({
   const [detailTab, setDetailTab] = useState("resumo");
   const [addrDraft, setAddrDraft] = useState({});
   const [addrNew, setAddrNew] = useState("");
+  const [processoDraft, setProcessoDraft] = useState("");
   useEffect(() => {
     if (locator && detailTab === "pagamento") setDetailTab("resumo");
   }, [locator, detailTab]);
@@ -314,6 +324,10 @@ export default function CrmPanel({
     });
   }, [selectedPlaca, selected?.dataEntradaPatio, selected?.dataSaidaPatio, selected?.patio]);
 
+  useEffect(() => {
+    setProcessoDraft(selected?.processo || "");
+  }, [selected?.placa, selected?.processo]);
+
   const timeline = useMemo(
     () => (data?.timeline || []).filter((t) => !selectedPlaca || t.placa === selectedPlaca),
     [data, selectedPlaca],
@@ -364,7 +378,7 @@ export default function CrmPanel({
             calLabel: "Novo caso",
           });
         }
-        if (!fechado && item.proximoContato) {
+        if (!locator && !fechado && item.proximoContato) {
           const kind = item.temMandado ? "mandado" : "contato";
           push(item.proximoContato, {
             id: `${kind}-${item.placa}`,
@@ -500,6 +514,13 @@ export default function CrmPanel({
     });
   };
 
+  const saveProcesso = async () => {
+    if (!selected || locator) return;
+    const next = processoDraft.trim();
+    if (next === (selected.processo || "")) return;
+    await runAction({ action: "update", placa: selected.placa, processo: next });
+  };
+
   const openCalForm = (isoDate) => {
     setPayForm((p) => ({
       ...p,
@@ -549,19 +570,14 @@ export default function CrmPanel({
     <div className="crm-root">
       {!view && (
       <div className="crm-toolbar">
+        {!locator && (
         <div className="crm-subnav">
-          {(locator
-            ? [
-                ["filas", "Filas"],
-                ["calendario", "Calendário"],
-              ]
-            : [
-                ["filas", "Filas"],
-                ["followups", "Follow-ups"],
-                ["calendario", "Calendário"],
-                ["patio", "Pátio"],
-              ]
-          ).map(([id, label]) => (
+          {[
+            ["filas", "Filas"],
+            ["followups", "Follow-ups"],
+            ["calendario", "Calendário"],
+            ["patio", "Pátio"],
+          ].map(([id, label]) => (
             <button
               key={id}
               type="button"
@@ -572,6 +588,7 @@ export default function CrmPanel({
             </button>
           ))}
         </div>
+        )}
         {crmTab === "filas" && (
           <button type="button" className="btn btn-primary" onClick={() => setNewOpen(true)}>
             + Ocorrência
@@ -699,7 +716,7 @@ export default function CrmPanel({
           <div className="crm-cal-actions">
             <p className="section-hint">
               {locator
-                ? "Toque num dia para ver os casos: novo, contato e pátio."
+                ? "Toque num dia para ver os casos: novo e pátio."
                 : "Toque num dia para ver os eventos: caso novo, contato, pátio e recebimento."}
             </p>
             {!locator && (
@@ -971,13 +988,13 @@ export default function CrmPanel({
       {selected &&
         createPortal(
           <div
-            className="sheet-root crm-detail-sheet"
+            className="sheet-root sheet-center crm-detail-sheet"
             role="dialog"
             aria-modal="true"
             aria-label={`Detalhe ${selected.placa}`}
           >
             <button type="button" className="sheet-backdrop" aria-label="Fechar" onClick={closeDetail} />
-            <div className="sheet sheet-tall crm-detail-card">
+            <div className="sheet crm-detail-card">
               <div className="sheet-handle" />
               <header className="crm-sheet-head">
                 <div className="crm-sheet-title">
@@ -985,10 +1002,7 @@ export default function CrmPanel({
                     <p className="crm-sheet-placa">{selected.placa}</p>
                     <span className="crm-status-chip">{labels[selected.status] || selected.status}</span>
                   </div>
-                  <p className="crm-sheet-sub">
-                    {[selected.veiculo, selected.cor, selected.uf].filter(Boolean).join(" · ") ||
-                      "Sem descrição"}
-                  </p>
+                  <p className="crm-sheet-sub">{vehicleFacts(selected).veiculo || "Sem descrição"}</p>
                   <p className="crm-sheet-meta-line">
                     <span>{selected.localizador || "—"}</span>
                     {!locator && selected.assessoria ? <span> · {selected.assessoria}</span> : null}
@@ -1001,6 +1015,7 @@ export default function CrmPanel({
                   </p>
                   <div className="crm-sheet-chips">
                     {selected.rastreado && <span className="tag-rastreado">Rastreado</span>}
+                    {selected.localizado && <span className="tag-localizado">Localizado</span>}
                     {selected.temMandado && <span className="tag-pagamento-pendente">MDD</span>}
                     {!locator && (data?.pendingByPlaca?.[selected.placa] || []).length > 0 && (
                       <span className="tag-pagamento-pendente">
@@ -1043,13 +1058,44 @@ export default function CrmPanel({
                 {detailTab === "resumo" && (
                   <>
                     <dl className="crm-facts">
-                      <div>
-                        <dt>Próx. contato</dt>
-                        <dd>{formatShortDate(selected.proximoContato)}</dd>
+                      <div className="crm-facts-wide">
+                        <dt>Nº do processo</dt>
+                        {locator ? (
+                          <dd>{selected.processo || "—"}</dd>
+                        ) : (
+                          <dd>
+                            <input
+                              className="crm-processo-input"
+                              value={processoDraft}
+                              onChange={(e) => setProcessoDraft(e.target.value)}
+                              onBlur={saveProcesso}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  e.preventDefault();
+                                  e.currentTarget.blur();
+                                }
+                              }}
+                              placeholder="Não informado"
+                              aria-label="Número do processo"
+                            />
+                          </dd>
+                        )}
+                      </div>
+                      <div className="crm-facts-wide">
+                        <dt>Veículo</dt>
+                        <dd>{vehicleFacts(selected).veiculo || "—"}</dd>
                       </div>
                       <div>
-                        <dt>Ocorrência</dt>
-                        <dd>{formatShortDate(selected.dataOcorrencia)}</dd>
+                        <dt>Cor</dt>
+                        <dd>{vehicleFacts(selected).cor || "—"}</dd>
+                      </div>
+                      <div>
+                        <dt>Comarca</dt>
+                        <dd>{vehicleFacts(selected).comarca || "—"}</dd>
+                      </div>
+                      <div>
+                        <dt>UF</dt>
+                        <dd>{vehicleFacts(selected).uf || "—"}</dd>
                       </div>
                       <div>
                         <dt>Pátio</dt>
@@ -1062,6 +1108,72 @@ export default function CrmPanel({
                       </div>
                       )}
                     </dl>
+
+                    <div className="crm-signal">
+                      <p className="crm-patio-box-title">Sinalizar</p>
+                      <div className="crm-toggle-row">
+                        <button
+                          type="button"
+                          className={`crm-toggle ${selected.rastreado ? "is-on" : ""}`}
+                          disabled={saving}
+                          onClick={() =>
+                            runAction({
+                              action: "update",
+                              placa: selected.placa,
+                              rastreado: !selected.rastreado,
+                            })
+                          }
+                        >
+                          Rastreado
+                        </button>
+                        <button
+                          type="button"
+                          className={`crm-toggle ${selected.localizado ? "is-on" : ""}`}
+                          disabled={saving}
+                          onClick={() =>
+                            runAction({
+                              action: "update",
+                              placa: selected.placa,
+                              localizado: !selected.localizado,
+                            })
+                          }
+                        >
+                          Localizado
+                        </button>
+                        {!locator && (
+                          <>
+                            <button
+                              type="button"
+                              className={`crm-toggle ${selected.temMandado ? "is-on" : ""}`}
+                              disabled={saving}
+                              onClick={() =>
+                                runAction({
+                                  action: "update",
+                                  placa: selected.placa,
+                                  temMandado: !selected.temMandado,
+                                })
+                              }
+                            >
+                              Mandado
+                            </button>
+                            <button
+                              type="button"
+                              className={`crm-toggle ${selected.usaGuincho ? "is-on" : ""}`}
+                              disabled={saving}
+                              onClick={() =>
+                                runAction({
+                                  action: "update",
+                                  placa: selected.placa,
+                                  usaGuincho: !selected.usaGuincho,
+                                })
+                              }
+                            >
+                              Guincho
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
 
                     <AddressEditor
                       placa={selected.placa}
@@ -1151,54 +1263,7 @@ export default function CrmPanel({
                       </div>
                     )}
 
-                    {!locator && (
-                    <>
-                    <div className="crm-toggle-row">
-                      <button
-                        type="button"
-                        className={`crm-toggle ${selected.rastreado ? "is-on" : ""}`}
-                        disabled={saving}
-                        onClick={() =>
-                          runAction({
-                            action: "update",
-                            placa: selected.placa,
-                            rastreado: !selected.rastreado,
-                          })
-                        }
-                      >
-                        Rastreado
-                      </button>
-                      <button
-                        type="button"
-                        className={`crm-toggle ${selected.temMandado ? "is-on" : ""}`}
-                        disabled={saving}
-                        onClick={() =>
-                          runAction({
-                            action: "update",
-                            placa: selected.placa,
-                            temMandado: !selected.temMandado,
-                          })
-                        }
-                      >
-                        Mandado
-                      </button>
-                      <button
-                        type="button"
-                        className={`crm-toggle ${selected.usaGuincho ? "is-on" : ""}`}
-                        disabled={saving}
-                        onClick={() =>
-                          runAction({
-                            action: "update",
-                            placa: selected.placa,
-                            usaGuincho: !selected.usaGuincho,
-                          })
-                        }
-                      >
-                        Guincho
-                      </button>
-                    </div>
-
-                    {!selected.noControle && (
+                    {!locator && !selected.noControle && (
                       <button
                         type="button"
                         className="btn btn-ghost btn-block crm-bridge-link"
@@ -1213,8 +1278,6 @@ export default function CrmPanel({
                       >
                         Enviar ao Controle
                       </button>
-                    )}
-                    </>
                     )}
                   </>
                 )}
@@ -1323,6 +1386,18 @@ export default function CrmPanel({
 
                 {detailTab === "historico" && (
                   <>
+                    <dl className="crm-facts">
+                      {!locator && (
+                        <div>
+                          <dt>Próx. contato</dt>
+                          <dd>{formatShortDate(selected.proximoContato)}</dd>
+                        </div>
+                      )}
+                      <div>
+                        <dt>Ocorrência</dt>
+                        <dd>{formatShortDate(selected.dataOcorrencia)}</dd>
+                      </div>
+                    </dl>
                     {!locator && (
                     <div className="crm-note-box">
                       <textarea

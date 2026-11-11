@@ -22,6 +22,8 @@ const PUBLIC_KEYS = [
   "uf",
   "localizador",
   "rastreado",
+  "localizado",
+  "processo",
   "temMandado",
   "patio",
   "dataApreensao",
@@ -136,6 +138,7 @@ export function publicLocalizadorCar(item) {
   if (out.veiculo) out.veiculo = publicText(out.veiculo);
   if (out.cor) out.cor = publicText(out.cor);
   if (out.patio) out.patio = publicText(out.patio);
+  if (out.processo) out.processo = publicText(out.processo);
   return out;
 }
 

@@ -2,15 +2,17 @@ import { useMemo, useState } from "react";
 import AddVehicleSheet from "../AddVehicleSheet";
 import CrmPanel from "../crm/CrmPanel";
 import { formatBRL, formatDate } from "../lib/format";
+import JacobinaPanel from "../jacobina/JacobinaPanel";
 import LocalizadosPanel from "../localizados/LocalizadosPanel";
 import NfsePanel from "../nfse/NfsePanel";
 import RadarPanel from "../radar/RadarPanel";
 import "./mobile.css";
 
-const SEARCH_TABS = new Set(["local", "feira", "crm", "calendario", "veiculos"]);
+const SEARCH_TABS = new Set(["local", "feira", "ruas", "crm", "calendario", "veiculos"]);
 const FILTER_TABS = new Set(["resumo", "veiculos", "insights", "crm", "calendario"]);
 const NESTED = {
   local: "Local",
+  ruas: "Ruas",
   feira: "Feira",
   veiculos: "Veículos",
   insights: "Insights",
@@ -190,7 +192,9 @@ export default function MobileApp({
         ? "Placa do dia"
         : tab === "feira"
           ? "Placa no radar"
-          : "Placa, banco, contato";
+          : tab === "ruas"
+            ? "Rua ou bairro"
+            : "Placa, banco, contato";
 
   const dashNeeded = tab === "resumo" || tab === "veiculos" || tab === "insights";
   const insightRows = insight === "assessoria" ? assessoriaChart : bancoChart;
@@ -222,6 +226,8 @@ export default function MobileApp({
         searchQuery={q}
       />
     );
+  } else if (tab === "ruas") {
+    body = <JacobinaPanel phone searchQuery={q} active={tab === "ruas"} />;
   } else if (tab === "feira") {
     body = (
       <RadarPanel
@@ -374,6 +380,10 @@ export default function MobileApp({
   } else {
     body = (
       <div className="phone-group">
+        <button type="button" className="phone-row" onClick={() => setTab("ruas")}>
+          <span>Ruas de Jacobina</span>
+          <span className="phone-chevron">›</span>
+        </button>
         <button type="button" className="phone-row" onClick={() => setTab("local")}>
           <span>Local</span>
           <span className="phone-chevron">›</span>
@@ -456,7 +466,7 @@ export default function MobileApp({
             </button>
           </div>
         </div>
-        <h1 className="phone-title">{TITLES[tab] || "GPS BA"}</h1>
+        <h1 className="phone-title">{locator && tab === "crm" ? "Filas" : TITLES[tab] || "GPS BA"}</h1>
         {SEARCH_TABS.has(tab) && (
           <div className="phone-search">
             <input
@@ -482,7 +492,11 @@ export default function MobileApp({
 
       <main className="phone-main">{body}</main>
 
-      <nav className="phone-nav" aria-label="Navegação principal">
+      <nav
+        className="phone-nav"
+        style={locator ? { gridTemplateColumns: "repeat(2, minmax(0, 1fr))" } : undefined}
+        aria-label="Navegação principal"
+      >
         {(locator
           ? [
               ["crm", "Filas", IconCrm],
