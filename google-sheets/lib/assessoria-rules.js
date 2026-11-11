@@ -177,6 +177,47 @@ export function normalizeAssessoria(value) {
   return raw.toUpperCase();
 }
 
+/** Nomes que identificam escritório. O localizador não pode vê-los. */
+export function assessoriaMentionNeedles() {
+  const names = new Set();
+  for (const name of CANONICAL_ASSESSORIAS) names.add(assessoriaKey(name));
+  for (const key of Object.keys(ASSESSORIA_ALIASES)) {
+    if (key.length >= 4) names.add(key);
+  }
+  for (const extra of [
+    "jcs",
+    "c6",
+    "bjl",
+    "gvc",
+    "jbm",
+    "safra",
+    "aymore",
+    "porto seguro",
+    "rci",
+    "martins e copetti",
+    "martins copetti",
+    "copetti",
+    "zaitter",
+    "nunes romero",
+    "cindy",
+    "geovanna",
+    "reigiane",
+    "karina",
+    "camila",
+    "vinicius",
+    "hellen",
+    "amanda",
+    "allan",
+    "jeane",
+    "caio",
+    "bruno vanderlei",
+    "bruno",
+  ]) {
+    names.add(extra);
+  }
+  return [...names].filter((name) => name.length >= 3).sort((a, b) => b.length - a.length);
+}
+
 export function resolveContato(assessoria, existingContato) {
   const canonical = normalizeAssessoria(assessoria);
 

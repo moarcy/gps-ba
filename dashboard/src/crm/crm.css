@@ -589,6 +589,22 @@ body.crm-dragging .crm-kanban {
 
 .crm-detail-sheet {
   z-index: 80;
+  overscroll-behavior: none;
+}
+
+.crm-detail-sheet .sheet,
+.crm-detail-sheet .sheet-body {
+  overscroll-behavior: contain;
+}
+
+.crm-detail-sheet .sheet-backdrop,
+.crm-detail-sheet .crm-sheet-head,
+.crm-detail-sheet .crm-detail-tabs {
+  touch-action: none;
+}
+
+.crm-detail-sheet .sheet-body {
+  touch-action: pan-y;
 }
 
 .crm-detail-card {

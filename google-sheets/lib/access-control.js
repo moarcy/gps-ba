@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { assessoriaMentionNeedles } from "./assessoria-rules.js";
 
 const SESSION_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -9,7 +10,9 @@ function sessionSecret() {
   return "gps-ba-sessao-local";
 }
 
-const BLOCKED_TIPO = new Set(["pagamento", "whatsapp", "zap"]);
+const BLOCKED_TIPO = new Set(["pagamento", "whatsapp", "zap", "contato"]);
+const CONTACT_LOG =
+  /contato com|entrei em contato|liguei|liga[cç][aã]o|cobrei|sem retorno|chamei no|zap enviado|mensagem enviada/i;
 const BLOCKED_TEXT =
   /assessoria|pagamento|pix|recibo|\br\$\b|di[aá]ria|pr[eê]mio|nfs-?e|\bbanco\b|guincho|\bvalor\b|carteira|ita[uú]|bradesco|santander|mapfre|financeira/i;
 const PHONE = /(?:\+?\d[\d\s().-]{7,}\d)/;
@@ -19,6 +22,7 @@ const PUBLIC_KEYS = [
   "dataOcorrencia",
   "veiculo",
   "cor",
+  "origem",
   "uf",
   "localizador",
   "rastreado",
@@ -125,9 +129,31 @@ export function publicText(value) {
   return text.replace(/\s{2,}/g, " ").replace(/\s+([·,])/g, "$1").trim();
 }
 
+export const LOCATOR_STATUSES = [
+  "nova",
+  "aguardando_mandado",
+  "com_mandado",
+  "apreendido",
+  "indisponivel_temp",
+  "cancelado",
+];
+
+export const LOCATOR_STATUS_LABELS = {
+  nova: "Nova ocorrência",
+  aguardando_mandado: "Aguardando mandado",
+  com_mandado: "Com mandado",
+  apreendido: "Apreendido",
+  indisponivel_temp: "Indisponível temp.",
+  cancelado: "Cancelado",
+};
+
+const SEIZED = new Set(["apreendido", "no_patio", "aguardando_pagamento", "removido", "entregue"]);
+
 export function locatorStatus(status) {
-  if (status === "aguardando_pagamento") return "no_patio";
-  return status || "nova";
+  if (SEIZED.has(status)) return "apreendido";
+  if (status === "inapto") return "cancelado";
+  if (LOCATOR_STATUSES.includes(status)) return status;
+  return "nova";
 }
 
 export function publicLocalizadorCar(item) {
@@ -137,9 +163,69 @@ export function publicLocalizadorCar(item) {
   }
   if (out.veiculo) out.veiculo = publicText(out.veiculo);
   if (out.cor) out.cor = publicText(out.cor);
+  if (out.origem) out.origem = publicText(out.origem);
   if (out.patio) out.patio = publicText(out.patio);
   if (out.processo) out.processo = publicText(out.processo);
   return out;
+}
+
+const OFFICE_NEEDLES = assessoriaMentionNeedles();
+
+function foldWithMap(text) {
+  let folded = "";
+  const map = [];
+  for (let i = 0; i < text.length; i += 1) {
+    const chunk = text[i].normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+    for (const ch of chunk) {
+      map.push(i);
+      folded += ch;
+    }
+  }
+  return { folded, map };
+}
+
+function blankRange(chars, start, end) {
+  for (let i = start; i <= end && i < chars.length; i += 1) chars[i] = "";
+}
+
+/** Tira escritório, banco e quem atende lá. O fato do processo fica. */
+export function scrubLocatorMessage(message) {
+  let text = String(message || "");
+  if (!text) return "";
+  if (/^localizador\s*:/i.test(text)) return "";
+  text = text.replace(/\b(s[aã]o\s+paulo)\b/gi, "§SAOPAULO§");
+  text = text.replace(/\b[\p{L}][\p{L}.']*(?:\s+[\p{L}][\p{L}.']*){0,3}\s*\([^)]{0,48}\)\s*:/gu, " ");
+  text = text.replace(/\b[\p{L}]{3,}\s+saiu\s+do(?:\s+[\p{L}\d]+)?/gu, " ");
+  text = text.replace(/\bcom\s+o\s+[\p{L}]{3,}\b/gu, " ");
+
+  const chars = [...text];
+  const { folded, map } = foldWithMap(text);
+  for (const needle of OFFICE_NEEDLES) {
+    let from = 0;
+    while (from < folded.length) {
+      const at = folded.indexOf(needle, from);
+      if (at < 0) break;
+      const before = at === 0 ? "" : folded[at - 1];
+      const after = folded[at + needle.length] || "";
+      const boundary = (ch) => !ch || !/[\p{L}\p{N}]/u.test(ch);
+      if (boundary(before) && boundary(after)) {
+        blankRange(chars, map[at], map[at + needle.length - 1]);
+      }
+      from = at + needle.length;
+    }
+  }
+  text = chars.join("");
+  text = text.replace(/§SAOPAULO§/g, "São Paulo");
+  text = text
+    .replace(/\(\s*\)/g, " ")
+    .replace(/:\s*/g, " ")
+    .replace(/(\d{1,2}\/\d{1,2})\s+e\s+(?=\p{L})/gu, "$1 ")
+    .replace(/\s+([,.;])/g, "$1")
+    .replace(/([,.;]){2,}/g, "$1")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+  if (!/[\p{L}\p{N}]/u.test(text)) return "";
+  return text;
 }
 
 export function locatorTimeline(events, placas) {
@@ -150,16 +236,17 @@ export function locatorTimeline(events, placas) {
       if (BLOCKED_TIPO.has(tipo)) return false;
       if (tipo === "endereco") return true;
       const msg = String(event.mensagem || "");
+      if (tipo !== "status" && CONTACT_LOG.test(msg)) return false;
       if (BLOCKED_TEXT.test(msg)) return false;
       if (PHONE.test(msg)) return false;
-      return true;
+      return Boolean(scrubLocatorMessage(msg));
     })
     .map((event) => ({
       id: event.id,
       dataHora: event.dataHora,
       placa: event.placa,
       tipo: event.tipo,
-      mensagem: event.mensagem,
+      mensagem: event.tipo?.toLowerCase() === "endereco" ? event.mensagem : scrubLocatorMessage(event.mensagem),
     }));
 }
 
@@ -169,15 +256,12 @@ export function scopeCrmForLocalizador(payload, actor) {
     .filter((item) => String(item.localizador || "").trim().toUpperCase() === loc)
     .map(publicLocalizadorCar);
   const placas = new Set(pipeline.map((item) => item.placa));
-  const statuses = (payload?.meta?.statuses || []).filter((status) => status !== "aguardando_pagamento");
-  const byStatus = Object.fromEntries(statuses.map((status) => [status, []]));
+  const byStatus = Object.fromEntries(LOCATOR_STATUSES.map((status) => [status, []]));
   for (const item of pipeline) {
     const key = byStatus[item.status] ? item.status : "nova";
-    if (!byStatus[key]) byStatus[key] = [];
     byStatus[key].push(item);
   }
-  const statusLabels = { ...(payload?.meta?.statusLabels || {}) };
-  delete statusLabels.aguardando_pagamento;
+  const statusLabels = { ...LOCATOR_STATUS_LABELS };
   const enderecos = (payload?.enderecos || [])
     .filter((item) => placas.has(item.placa))
     .map((item) => ({

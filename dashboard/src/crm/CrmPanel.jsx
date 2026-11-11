@@ -7,6 +7,8 @@ import NewOcorrenciaSheet from "./NewOcorrenciaSheet";
 import {
   NEXT_STATUS,
   NEXT_STATUS_ACTION_LABELS,
+  LOCATOR_STATUSES,
+  locatorQueueStatus,
   STATUS_LABELS,
   STATUS_ORDER,
   formatDateTime,
@@ -260,18 +262,27 @@ export default function CrmPanel({
   const [statusOverrides, setStatusOverrides] = useState({});
   const [patioDates, setPatioDates] = useState({ entrada: "", saida: "", patio: "" });
 
-  const labels = data?.meta?.statusLabels || STATUS_LABELS;
+  const labels = locator
+    ? {
+        nova: "Nova ocorrência",
+        aguardando_mandado: "Aguardando mandado",
+        com_mandado: "Com mandado",
+        apreendido: "Apreendido",
+        indisponivel_temp: "Indisponível temp.",
+        cancelado: "Cancelado",
+      }
+    : data?.meta?.statusLabels || STATUS_LABELS;
   const patioOptions = data?.meta?.patios || ["BF Car", "Ponto a Ponto"];
   const pipeline = useMemo(() => {
     const all = data?.pipeline || [];
     const locNeedle = String(locFilter || "all").trim().toUpperCase();
     const assNeedle = String(assessoriaFilter || "all").trim().toUpperCase();
     return all
-      .map((item) =>
-        statusOverrides[item.placa]
-          ? { ...item, status: statusOverrides[item.placa] }
-          : item,
-      )
+      .map((item) => {
+        const status = statusOverrides[item.placa]
+          || (locator ? locatorQueueStatus(item.status) : item.status);
+        return status === item.status ? item : { ...item, status };
+      })
       .filter((item) => {
       if (locNeedle !== "ALL") {
         const loc = String(item.localizador || "").trim().toUpperCase();
@@ -283,7 +294,7 @@ export default function CrmPanel({
       }
       return matchesCrmSearch(item, searchQuery, labels);
     });
-  }, [data, searchQuery, labels, locFilter, assessoriaFilter, statusOverrides]);
+  }, [data, searchQuery, labels, locFilter, assessoriaFilter, statusOverrides, locator]);
 
   const pipelinePlacas = useMemo(() => new Set(pipeline.map((p) => p.placa)), [pipeline]);
 
@@ -309,8 +320,11 @@ export default function CrmPanel({
   }, [data, pipelinePlacas]);
 
   // Usa pipeline completo (não o filtrado) para o sheet não “sumir” com filtros
-  const selected =
+  const selectedRaw =
     (data?.pipeline || []).find((p) => p.placa === selectedPlaca) || null;
+  const selected = selectedRaw && locator
+    ? { ...selectedRaw, status: locatorQueueStatus(selectedRaw.status) }
+    : selectedRaw;
 
   useEffect(() => {
     if (!selected) {
@@ -328,10 +342,21 @@ export default function CrmPanel({
     setProcessoDraft(selected?.processo || "");
   }, [selected?.placa, selected?.processo]);
 
-  const timeline = useMemo(
-    () => (data?.timeline || []).filter((t) => !selectedPlaca || t.placa === selectedPlaca),
-    [data, selectedPlaca],
-  );
+  const timeline = useMemo(() => {
+    const items = (data?.timeline || []).filter((t) => !selectedPlaca || t.placa === selectedPlaca);
+    const opened = selected?.dataOcorrencia;
+    const already = items.some((item) => /ocorr[eê]ncia criada/i.test(item.mensagem || ""));
+    if (opened && !already) {
+      items.push({
+        id: `ocorrencia-${selected.placa}`,
+        placa: selected.placa,
+        tipo: "ocorrência",
+        dataHora: String(opened).slice(0, 10),
+        mensagem: "Ocorrência",
+      });
+    }
+    return items.sort((a, b) => String(b.dataHora || "").localeCompare(String(a.dataHora || "")));
+  }, [data, selectedPlaca, selected?.dataOcorrencia, selected?.placa]);
   const pagamentosPlaca = useMemo(
     () => (data?.pagamentos || []).filter((p) => p.placa === selectedPlaca),
     [data, selectedPlaca],
@@ -391,7 +416,7 @@ export default function CrmPanel({
             calLabel: item.temMandado ? "MDD" : "Contato",
           });
         }
-        if (item.dataEntradaPatio) {
+        if (!locator && item.dataEntradaPatio) {
           push(item.dataEntradaPatio, {
             id: `patio-${item.placa}`,
             kind: "patio",
@@ -403,7 +428,19 @@ export default function CrmPanel({
             calLabel: "Entrada no pátio",
           });
         }
-        if (item.dataSaidaPatio) {
+        if (locator && item.status === "apreendido" && (item.dataApreensao || item.dataEntradaPatio)) {
+          push(item.dataApreensao || item.dataEntradaPatio, {
+            id: `apreendido-${item.placa}`,
+            kind: "patio",
+            placa: item.placa,
+            assessoria: item.assessoria,
+            localizador: item.localizador,
+            veiculo: item.veiculo,
+            pago: false,
+            calLabel: "Apreendido",
+          });
+        }
+        if (!locator && item.dataSaidaPatio) {
           push(item.dataSaidaPatio, {
             id: `saida-${item.placa}`,
             kind: "saida",
@@ -461,10 +498,43 @@ export default function CrmPanel({
 
   useEffect(() => {
     if (!selectedPlaca) return undefined;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    const html = document.documentElement;
+    const body = document.body;
+    const scrollY = window.scrollY;
+    const prev = {
+      htmlOverflow: html.style.overflow,
+      bodyOverflow: body.style.overflow,
+      bodyPosition: body.style.position,
+      bodyTop: body.style.top,
+      bodyWidth: body.style.width,
+    };
+    html.style.overflow = "hidden";
+    body.style.overflow = "hidden";
+    body.style.position = "fixed";
+    body.style.top = `-${scrollY}px`;
+    body.style.width = "100%";
+
+    const backgroundWouldMove = (target) => {
+      const root = document.querySelector(".crm-detail-sheet");
+      const scroller = root?.querySelector(".sheet-body");
+      if (!(scroller instanceof HTMLElement) || !scroller.contains(target)) return true;
+      return scroller.scrollHeight <= scroller.clientHeight + 1;
+    };
+    const stopBackgroundScroll = (event) => {
+      if (backgroundWouldMove(event.target)) event.preventDefault();
+    };
+    document.addEventListener("touchmove", stopBackgroundScroll, { passive: false });
+    document.addEventListener("wheel", stopBackgroundScroll, { passive: false });
+
     return () => {
-      document.body.style.overflow = prev;
+      document.removeEventListener("touchmove", stopBackgroundScroll);
+      document.removeEventListener("wheel", stopBackgroundScroll);
+      html.style.overflow = prev.htmlOverflow;
+      body.style.overflow = prev.bodyOverflow;
+      body.style.position = prev.bodyPosition;
+      body.style.top = prev.bodyTop;
+      body.style.width = prev.bodyWidth;
+      window.scrollTo(0, scrollY);
     };
   }, [selectedPlaca]);
 
@@ -607,7 +677,7 @@ export default function CrmPanel({
 
       {crmTab === "filas" && phone && (
         <PhoneFilas
-          statuses={locator ? STATUS_ORDER.filter((s) => s !== "aguardando_pagamento") : KANBAN_STATUSES}
+          statuses={locator ? LOCATOR_STATUSES : KANBAN_STATUSES}
           byStatus={byStatus}
           labels={labels}
           onOpen={openDetail}
@@ -623,7 +693,7 @@ export default function CrmPanel({
               : "Toque no card para abrir · arraste pela alça ⋮⋮ para mudar a coluna."}
           </p>
           <div className="crm-kanban">
-            {(locator ? STATUS_ORDER.filter((s) => s !== "aguardando_pagamento") : KANBAN_STATUSES).map((status) => {
+            {(locator ? LOCATOR_STATUSES : KANBAN_STATUSES).map((status) => {
               const items = byStatus[status] || [];
               if (!locator && !items.length && ["inapto"].includes(status)) return null;
               return (
@@ -1386,18 +1456,14 @@ export default function CrmPanel({
 
                 {detailTab === "historico" && (
                   <>
+                    {!locator && (
                     <dl className="crm-facts">
-                      {!locator && (
-                        <div>
-                          <dt>Próx. contato</dt>
-                          <dd>{formatShortDate(selected.proximoContato)}</dd>
-                        </div>
-                      )}
                       <div>
-                        <dt>Ocorrência</dt>
-                        <dd>{formatShortDate(selected.dataOcorrencia)}</dd>
+                        <dt>Próx. contato</dt>
+                        <dd>{formatShortDate(selected.proximoContato)}</dd>
                       </div>
                     </dl>
+                    )}
                     {!locator && (
                     <div className="crm-note-box">
                       <textarea
@@ -1429,7 +1495,11 @@ export default function CrmPanel({
                         <div key={t.id} className="crm-timeline-item">
                           <div className="crm-timeline-meta">
                             <span className="crm-timeline-type">{t.tipo}</span>
-                            <small>{formatDateTime(t.dataHora)}</small>
+                            <small>
+                              {/^\d{4}-\d{2}-\d{2}$/.test(String(t.dataHora || ""))
+                                ? formatShortDate(t.dataHora)
+                                : formatDateTime(t.dataHora)}
+                            </small>
                           </div>
                           <p>{t.mensagem}</p>
                         </div>

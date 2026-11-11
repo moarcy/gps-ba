@@ -12,6 +12,30 @@ export const STATUS_ORDER = [
   "cancelado",
 ];
 
+export const LOCATOR_STATUSES = [
+  "nova",
+  "aguardando_mandado",
+  "com_mandado",
+  "apreendido",
+  "indisponivel_temp",
+  "cancelado",
+];
+
+const SEIZED_FOR_LOCATOR = new Set([
+  "apreendido",
+  "no_patio",
+  "aguardando_pagamento",
+  "removido",
+  "entregue",
+]);
+
+export function locatorQueueStatus(status) {
+  if (SEIZED_FOR_LOCATOR.has(status)) return "apreendido";
+  if (status === "inapto") return "cancelado";
+  if (LOCATOR_STATUSES.includes(status)) return status;
+  return "nova";
+}
+
 export const STATUS_LABELS = {
   nova: "Nova",
   aguardando_mandado: "Aguardando mandado",

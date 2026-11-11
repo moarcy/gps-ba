@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   locatorTimeline,
   publicLocalizadorCar,
+  scrubLocatorMessage,
   readSession,
   scopeCrmForLocalizador,
   senhaMatches,
@@ -73,7 +74,7 @@ test("localizador não recebe pagamento, assessoria, telefone nem carro de outro
   const raw = JSON.stringify(scoped);
   assert.equal(scoped.pipeline.length, 1);
   assert.equal(scoped.pipeline[0].placa, "ABC1D23");
-  assert.equal(scoped.pipeline[0].status, "no_patio");
+  assert.equal(scoped.pipeline[0].status, "apreendido");
   assert.equal(scoped.pipeline[0].veiculo, "GOL");
   assert.equal(scoped.pipeline[0].rastreado, true);
   assert.equal(scoped.pipeline[0].localizado, false);
@@ -99,6 +100,51 @@ test("localizador não recebe pagamento, assessoria, telefone nem carro de outro
   assert.equal(raw.includes("Aguardando pagamento"), false);
 });
 
+test("histórico do localizador tira o nome da assessoria e guarda o fato", () => {
+  const timeline = locatorTimeline(
+    [
+      {
+        id: "a",
+        placa: "ABC1D23",
+        tipo: "nota",
+        mensagem: "10/11 Paschoalotto: devolvido.",
+        dataHora: "2026-11-10T13:54:00.000Z",
+      },
+      {
+        id: "b",
+        placa: "ABC1D23",
+        tipo: "nota",
+        mensagem:
+          "10/11 Cindy (C6): mandado negativado em Barreiras. 11/11: Paulo saiu do C6 e podem pedir outro.",
+        dataHora: "2026-11-10T13:20:00.000Z",
+      },
+      {
+        id: "c",
+        placa: "ABC1D23",
+        tipo: "status",
+        mensagem: "Localizador: ENDRIGO → MACIEL",
+        dataHora: "2026-11-11T17:33:00.000Z",
+      },
+      {
+        id: "d",
+        placa: "ABC1D23",
+        tipo: "endereco",
+        mensagem: "END 1 adicionado: Rua Tim Maia, 99, São Paulo, Barreiras-BA",
+        dataHora: "2026-11-10T13:20:00.000Z",
+      },
+    ],
+    new Set(["ABC1D23"]),
+  );
+  const byId = Object.fromEntries(timeline.map((item) => [item.id, item.mensagem]));
+  assert.equal(byId.a, "10/11 devolvido.");
+  assert.match(byId.b, /mandado negativado em Barreiras/);
+  assert.match(byId.b, /11\/11 podem pedir outro/);
+  assert.equal(/paschoalotto|cindy|c6|paulo/i.test(byId.b), false);
+  assert.equal(byId.c, undefined);
+  assert.match(byId.d, /São Paulo/);
+  assert.equal(scrubLocatorMessage("Schulze: ainda não saiu o mandado."), "ainda não saiu o mandado.");
+});
+
 test("histórico do localizador guarda endereço e esconde pagamento e assessoria", () => {
   const placas = new Set(["ABC1D23"]);
   const timeline = locatorTimeline(payload.timeline, placas);
@@ -110,7 +156,7 @@ test("histórico do localizador guarda endereço e esconde pagamento e assessori
 
 test("carro público não copia campo interno", () => {
   const car = publicLocalizadorCar(payload.pipeline[0]);
-  assert.equal(car.status, "no_patio");
+  assert.equal(car.status, "apreendido");
   assert.equal(Object.hasOwn(car, "assessoria"), false);
   assert.equal(Object.hasOwn(car, "telefone"), false);
 });
@@ -140,6 +186,18 @@ test("descrição do veículo perde carteira e banco", () => {
   assert.equal(car.veiculo, "TIGGO 8 PRO");
   assert.equal(car.cor, "");
   assert.equal(JSON.stringify(car).toLowerCase().includes("itau"), false);
+  const comarca = publicLocalizadorCar({
+    placa: "OUS4C82",
+    status: "aguardando_mandado",
+    origem: "BARREIRAS",
+  });
+  assert.equal(comarca.origem, "BARREIRAS");
+  const banco = publicLocalizadorCar({
+    placa: "ABC1D23",
+    status: "nova",
+    origem: "BANCO PAN",
+  });
+  assert.equal(JSON.stringify(banco).toLowerCase().includes("banco"), false);
 });
 
 test("senha numérica da planilha aceita o zero à esquerda", () => {
