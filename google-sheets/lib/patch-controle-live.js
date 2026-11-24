@@ -6,7 +6,7 @@ import {
   normalizePlaca,
   toExcelDate,
 } from "./excel-utils.js";
-import { DATA_START, HEADER_ROW } from "./controle-sheet-theme.js";
+import { DATA_COLUMNS, DATA_START, HEADER_ROW } from "./controle-sheet-theme.js";
 
 function dateYear(value) {
   if (!(value instanceof Date) || Number.isNaN(value.getTime())) return null;
@@ -18,6 +18,29 @@ export function dateFormatUsesMinutes(fmt) {
   const text = String(fmt || "");
   if (!text || text === "General" || text === "@") return false;
   return /m/i.test(text.replace(/MM/g, ""));
+}
+
+function columnLetter(col) {
+  let n = col;
+  let out = "";
+  while (n > 0) {
+    const rem = (n - 1) % 26;
+    out = String.fromCharCode(65 + rem) + out;
+    n = Math.floor((n - 1) / 26);
+  }
+  return out;
+}
+
+function lastControleFilterRow(worksheet) {
+  let last = HEADER_ROW;
+  const max = Math.min(worksheet.rowCount || 0, DATA_START + 400);
+  for (let r = DATA_START; r <= max; r++) {
+    const placa = cellValue(worksheet.getCell(r, 6));
+    const imposto = worksheet.getCell(r, 12).value;
+    const saldo = worksheet.getCell(r, 13).value;
+    if (placa || imposto || saldo) last = r;
+  }
+  return last;
 }
 
 /**
@@ -67,6 +90,28 @@ export function healControleSheet(worksheet) {
 
   if (worksheet.getColumn(1).numFmt !== DATE_FMT) {
     worksheet.getColumn(1).numFmt = DATE_FMT;
+    report.changed = true;
+  }
+
+  // Filtro do Google Sheets grava hidden="1" nas linhas e, na volta pelo
+  // ExcelJS, o critério some. Sem isso a Planilha1 abre só com os carros
+  // que passaram no filtro antigo.
+  let unhidden = 0;
+  worksheet.eachRow({ includeEmpty: true }, (row, rowNumber) => {
+    if (rowNumber < DATA_START || !row.hidden) return;
+    row.hidden = false;
+    unhidden += 1;
+  });
+  if (unhidden) {
+    report.unhidden = unhidden;
+    report.changed = true;
+  }
+
+  const filterEnd = lastControleFilterRow(worksheet);
+  const filterRef = `$A$${HEADER_ROW}:$${columnLetter(DATA_COLUMNS)}$${filterEnd}`;
+  if (filterEnd >= DATA_START && worksheet.autoFilter !== filterRef) {
+    worksheet.autoFilter = filterRef;
+    report.filterRef = filterRef;
     report.changed = true;
   }
 

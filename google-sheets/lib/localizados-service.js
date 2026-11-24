@@ -10,6 +10,10 @@ import {
   readLocalizadosOps,
   upsertLocalizadosOpsRow,
 } from "./localizador-lotes.js";
+import { readGestorRecords } from "../sync-controle-diligencias.js";
+import { locatorStatus } from "./access-control.js";
+import { attachFotos } from "./bira-fotos.js";
+import { readPipeline } from "./crm-sheets.js";
 import { parseLocgramLive } from "./parse-locgram-live.js";
 
 const LOC_META = {
@@ -25,6 +29,7 @@ const GAP_MS = GAP_MINUTES * 60 * 1000;
 
 const cache = {
   payload: null,
+  apreendidas: new Set(),
   loadedAt: 0,
   ttlMs: 20_000,
 };
@@ -39,7 +44,31 @@ function gestorId() {
 
 export function invalidateLocalizadosCache() {
   cache.payload = null;
+  cache.apreendidas = new Set();
   cache.loadedAt = 0;
+}
+
+function platesApreendidas(workbook) {
+  const set = new Set();
+  try {
+    const controle = workbook.getWorksheet("Planilha1");
+    if (controle) {
+      for (const placa of readGestorRecords(controle).keys()) set.add(placa);
+    }
+  } catch (error) {
+    console.error("Controle:", error.message || error);
+  }
+  try {
+    const pipeline = workbook.getWorksheet("CRM Pipeline");
+    if (pipeline) {
+      for (const item of readPipeline(pipeline)) {
+        if (item.placa && locatorStatus(item.status) === "apreendido") set.add(item.placa);
+      }
+    }
+  } catch (error) {
+    console.error("CRM:", error.message || error);
+  }
+  return set;
 }
 
 function pad(n) {
@@ -224,7 +253,7 @@ async function loadWorkbook({ useCache = false } = {}) {
 
 export async function getLocalizadosData({ force = false } = {}) {
   if (!force && cache.payload && Date.now() - cache.loadedAt < cache.ttlMs) {
-    return cache.payload;
+    return attachFotos(cache.payload, cache.apreendidas);
   }
 
   const { workbook } = await loadWorkbook({ useCache: !force });
@@ -238,8 +267,9 @@ export async function getLocalizadosData({ force = false } = {}) {
 
   const payload = buildPayload(readLocalizadosOps(ws));
   cache.payload = payload;
+  cache.apreendidas = platesApreendidas(workbook);
   cache.loadedAt = Date.now();
-  return payload;
+  return attachFotos(payload, cache.apreendidas);
 }
 
 export async function updatePosicao({ placa, posicao, obs } = {}) {
@@ -267,9 +297,11 @@ export async function updatePosicao({ placa, posicao, obs } = {}) {
 
     const payload = buildPayload(readLocalizadosOps(workbook.getWorksheet(LOCALIZADOS_OPS_SHEET)));
     cache.payload = payload;
+    cache.apreendidas = platesApreendidas(workbook);
     cache.loadedAt = Date.now();
-    const item = payload.dias.flatMap((d) => d.items).find((it) => it.placa === plate);
-    return { ok: true, placa: plate, posicao: next, obs: item?.obs || obsText || "", item, data: payload };
+    const shown = attachFotos(payload, cache.apreendidas);
+    const item = shown.dias.flatMap((d) => d.items).find((it) => it.placa === plate);
+    return { ok: true, placa: plate, posicao: next, obs: item?.obs || obsText || "", item, data: shown };
   });
 }
 

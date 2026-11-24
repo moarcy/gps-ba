@@ -9,6 +9,9 @@
   },
   "dependencies": {
     "dotenv": "^16.4.7",
-    "playwright": "^1.52.0"
+    "node-forge": "^1.4.3",
+    "playwright": "^1.52.0",
+    "qrcode": "^1.5.4",
+    "xml-crypto": "^6.4.0"
   }
 }

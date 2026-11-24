@@ -1,9 +1,61 @@
 import { useEffect, useMemo, useState } from "react";
+import { apiFetch, loadSession } from "../lib/api";
 import { formatBRL } from "../lib/format";
+import {
+  MOTIVOS_SUBSTITUICAO,
+  TIPOS_NOTA,
+  buildDescricaoNota,
+  buildNomeArquivo,
+  labelCodigoNacional,
+  linhaUnica,
+} from "../../../google-sheets/lib/nfse-nota.js";
 import "./nfse.css";
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
+}
+
+function parseMoney(value) {
+  const text = String(value ?? "").trim();
+  if (!text) return 0;
+  if (text.includes(",") && text.includes(".")) {
+    return Number(text.replace(/\./g, "").replace(",", ".")) || 0;
+  }
+  return Number(text.replace(",", ".")) || 0;
+}
+
+function moneyInput(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return "";
+  return n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function isoDia(value) {
+  const text = String(value || "").trim();
+  const iso = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  const br = text.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+  if (br) return `${br[3]}-${br[2]}-${br[1]}`;
+  return "";
+}
+
+function statusNota(emitida) {
+  if (emitida.status === "authorized") return "autorizada";
+  if (emitida.status === "substituida") {
+    return emitida.substituidaPor ? `substituída pela ${emitida.substituidaPor}` : "substituída";
+  }
+  if (emitida.status === "dry_run") return "conferida";
+  if (emitida.status === "error") return "erro";
+  if (emitida.status === "pending") return "pendente";
+  return emitida.status || "";
+}
+
+function podeSubstituir(emitida) {
+  return emitida.status === "authorized" && String(emitida.chaveAcesso || "").replace(/\D/g, "").length === 50;
+}
+
+function podeVerPdf(emitida) {
+  return Boolean(emitida.pdf || emitida.chaveAcesso);
 }
 
 const EMPTY_TOMADOR = {
@@ -21,6 +73,9 @@ const EMPTY_TOMADOR = {
   email: "",
 };
 
+const EMPTY_CHECKS = { apreensao: false, guincho: false, estadias: false, chaveiro: false };
+const EMPTY_VALORES = { apreensao: "", guincho: "", estadias: "", chaveiro: "" };
+
 export default function NfsePanel({
   data,
   loading,
@@ -32,100 +87,254 @@ export default function NfsePanel({
   phone = false,
 }) {
   const tomadores = data?.tomadores || [];
-  const servicos = data?.servicos || [];
   const config = data?.config || {};
   const emitidas = data?.emitidas || [];
 
+  const [modo, setModo] = useState("uma");
   const [tomadorId, setTomadorId] = useState("");
-  const [servicoCodigo, setServicoCodigo] = useState("");
+  const [placa, setPlaca] = useState("");
+  const [financiado, setFinanciado] = useState("");
+  const [tipo, setTipo] = useState("apreensao");
   const [descricao, setDescricao] = useState("");
-  const [quantidade, setQuantidade] = useState("1");
-  const [valorUnitario, setValorUnitario] = useState("");
-  const [aliquota, setAliquota] = useState("");
+  const [referente, setReferente] = useState("");
+  const [valor, setValor] = useState("");
+  const [checks, setChecks] = useState(EMPTY_CHECKS);
+  const [valores, setValores] = useState(EMPTY_VALORES);
+  const [km, setKm] = useState("");
+  const [diarias, setDiarias] = useState("");
+  const [aliquota, setAliquota] = useState("16");
   const [dataFato, setDataFato] = useState(todayIso());
   const [dryRun, setDryRun] = useState(false);
   const [showTomadorForm, setShowTomadorForm] = useState(false);
   const [tomadorForm, setTomadorForm] = useState(EMPTY_TOMADOR);
   const [localMsg, setLocalMsg] = useState("");
   const [localErr, setLocalErr] = useState("");
+  const [nomesProntos, setNomesProntos] = useState([]);
   const [step, setStep] = useState(0);
+  const [tela, setTela] = useState("notas");
+  const [filtroAssessoria, setFiltroAssessoria] = useState("");
+  const [filtroDe, setFiltroDe] = useState("");
+  const [filtroAte, setFiltroAte] = useState("");
+  const [substituir, setSubstituir] = useState(null);
+  const [motivoSubst, setMotivoSubst] = useState("99");
+  const [motivoTexto, setMotivoTexto] = useState("Correção dos dados da nota.");
+  const [pdfAberto, setPdfAberto] = useState(null);
+  const [abrindoPdf, setAbrindoPdf] = useState("");
+
+  useEffect(() => {
+    const token = loadSession()?.token;
+    if (token) document.cookie = `gpsba=${encodeURIComponent(token)}; Path=/; SameSite=Lax`;
+  }, []);
 
   const qNorm = searchQuery.trim().toUpperCase();
   const tomadoresVisiveis = useMemo(() => {
-    if (!qNorm) return tomadores;
-    const matched = tomadores.filter((t) =>
-      [t.razaoSocial, t.documento, t.municipio]
+    const sorted = [...tomadores].sort((a, b) =>
+      String(a.id).localeCompare(String(b.id), "pt"),
+    );
+    if (!qNorm) return sorted;
+    const matched = sorted.filter((t) =>
+      [t.id, t.razaoSocial, t.documento, t.municipio]
         .filter(Boolean)
         .join(" ")
         .toUpperCase()
         .includes(qNorm),
     );
-    const current = tomadores.find((t) => t.id === tomadorId || t.documento === tomadorId);
+    const current = sorted.find((t) => t.id === tomadorId || t.documento === tomadorId);
     if (current && !matched.some((t) => t.id === current.id)) return [current, ...matched];
     return matched;
   }, [tomadores, qNorm, tomadorId]);
 
+  const assessorias = useMemo(() => {
+    const map = new Map();
+    for (const tomador of tomadores) {
+      if (tomador.id) map.set(tomador.id, tomador.razaoSocial || tomador.id);
+    }
+    for (const emitida of emitidas) {
+      const id = emitida.tomadorId || emitida.tomadorNome;
+      if (id && !map.has(id)) map.set(id, emitida.tomadorNome || id);
+    }
+    return [...map.entries()].sort((a, b) => String(a[0]).localeCompare(String(b[0]), "pt"));
+  }, [tomadores, emitidas]);
+
   const emitidasVisiveis = useMemo(() => {
-    if (!qNorm) return emitidas;
-    return emitidas.filter((e) =>
-      [e.numeroNf, e.tomadorNome, e.tomadorId, e.servicoCodigo, e.status, e.erro]
-        .filter(Boolean)
-        .join(" ")
-        .toUpperCase()
-        .includes(qNorm),
-    );
-  }, [emitidas, qNorm]);
+    return emitidas.filter((e) => {
+      if (qNorm) {
+        const blob = [e.nomeArquivo, e.numeroNf, e.placa, e.financiado, e.tomadorNome, e.tomadorId, e.tipo, e.status]
+          .filter(Boolean)
+          .join(" ")
+          .toUpperCase();
+        if (!blob.includes(qNorm)) return false;
+      }
+      if (filtroAssessoria && (e.tomadorId || e.tomadorNome) !== filtroAssessoria) return false;
+      const dia = isoDia(e.dataFato) || isoDia(e.criadoEm);
+      if (filtroDe && (!dia || dia < filtroDe)) return false;
+      if (filtroAte && (!dia || dia > filtroAte)) return false;
+      return true;
+    });
+  }, [emitidas, qNorm, filtroAssessoria, filtroDe, filtroAte]);
 
   useEffect(() => {
-    if (!servicoCodigo && servicos[0]?.codigo) {
-      setServicoCodigo(servicos[0].codigo);
-    }
-  }, [servicos, servicoCodigo]);
+    if (aliquota === "") setAliquota("16");
+  }, [aliquota]);
 
   useEffect(() => {
-    if (aliquota === "" && config.aliquota != null) {
-      setAliquota(String(config.aliquota));
-    }
-  }, [config.aliquota, aliquota]);
-
-  const selectedServico = useMemo(
-    () => servicos.find((s) => s.codigo === servicoCodigo) || null,
-    [servicos, servicoCodigo],
-  );
+    if (!pdfAberto) return undefined;
+    const onKey = (event) => {
+      if (event.key === "Escape") setPdfAberto(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [pdfAberto]);
 
   const selectedTomador = useMemo(
     () => tomadores.find((t) => t.id === tomadorId || t.documento === tomadorId) || null,
     [tomadores, tomadorId],
   );
 
-  useEffect(() => {
-    if (!selectedServico) return;
-    if (!descricao && selectedServico.descricaoPadrao) {
-      setDescricao(selectedServico.descricaoPadrao);
-    }
-  }, [selectedServico, descricao]);
-
-  const qtd = Number(String(quantidade).replace(",", ".")) || 0;
-  const unit = Number(String(valorUnitario).replace(",", ".")) || 0;
-  const total = Number((qtd * unit).toFixed(2));
   const bankText = config.dados_bancarios || "";
+  const assessoria = selectedTomador?.id || "";
+  const nomePrevisto = buildNomeArquivo({
+    numero: "Nº",
+    placa,
+    financiado,
+    assessoria,
+  });
 
-  const previewItems = [
-    {
-      label: "Serviço",
-      descricao: descricao || "—",
-      quantidade: qtd,
-      valorUnitario: unit,
-      valorTotal: total,
-    },
-    {
-      label: "Dados bancários",
-      descricao: bankText,
-      quantidade: 0,
-      valorUnitario: 0,
-      valorTotal: 0,
-    },
-  ];
+  const linhas = useMemo(() => {
+    if (modo === "uma") {
+      const spec = TIPOS_NOTA.find((t) => t.id === tipo);
+      return [
+        {
+          tipo: spec,
+          descricao: linhaUnica(descricao),
+          valor: parseMoney(valor),
+          nome: nomePrevisto,
+        },
+      ];
+    }
+    return TIPOS_NOTA.filter((t) => checks[t.id]).map((spec) => ({
+      tipo: spec,
+      descricao: buildDescricaoNota({
+        tipo: spec.id,
+        texto: referente,
+        km,
+        diarias,
+      }),
+      valor: parseMoney(valores[spec.id]),
+      nome: nomePrevisto,
+    }));
+  }, [modo, tipo, descricao, valor, checks, referente, km, diarias, valores, nomePrevisto]);
+
+  const total = linhas.reduce((sum, linha) => sum + (linha.valor || 0), 0);
+
+  const codigoDe = (codigo) => labelCodigoNacional(codigo);
+
+  const nomeDownload = (emitida) => {
+    const padrao = buildNomeArquivo({
+      numero: emitida.numeroNf,
+      placa: emitida.placa,
+      financiado: emitida.financiado,
+      assessoria: emitida.tomadorId || emitida.tomadorNome,
+    });
+    return `${padrao || emitida.nomeArquivo || "nfse"}.pdf`;
+  };
+
+  const baixarArquivo = (emitida) => {
+    const nome = nomeDownload(emitida);
+    const link = document.createElement("a");
+    link.href = `/api/nfse/pdf?id=${encodeURIComponent(emitida.id)}`;
+    link.download = nome;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setLocalErr("");
+    setLocalMsg(`PDF baixado: ${nome}`);
+  };
+
+  const garantirPdf = async (emitida) => {
+    if (emitida.pdf) return;
+    const pedido = await apiFetch("/api/nfse", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "baixar_pdf", id: emitida.id }),
+    });
+    const corpo = await pedido.json().catch(() => ({}));
+    if (!pedido.ok) throw new Error(corpo.error || "Não gerei o PDF.");
+    await onReload();
+  };
+
+  const verNota = async (emitida) => {
+    setLocalErr("");
+    setLocalMsg("");
+    setAbrindoPdf(emitida.id);
+    try {
+      await garantirPdf(emitida);
+      setPdfAberto({ id: emitida.id, nome: nomeDownload(emitida), abertoEm: Date.now() });
+    } catch (err) {
+      setLocalErr(err.message || "Não abri o PDF.");
+    } finally {
+      setAbrindoPdf("");
+    }
+  };
+
+  const baixarNota = async (emitida) => {
+    setLocalErr("");
+    setLocalMsg("");
+    setAbrindoPdf(emitida.id);
+    try {
+      await garantirPdf(emitida);
+      baixarArquivo(emitida);
+    } catch (err) {
+      setLocalErr(err.message || "Não baixei o PDF.");
+    } finally {
+      setAbrindoPdf("");
+    }
+  };
+
+  const editarNota = (emitida) => {
+    if (!podeSubstituir(emitida)) {
+      setLocalErr("Só dá para substituir uma nota autorizada.");
+      return;
+    }
+    const spec =
+      TIPOS_NOTA.find((item) => item.id === emitida.tipo) ||
+      TIPOS_NOTA.find((item) => item.codigo === emitida.servicoCodigo || item.codigoNacional === emitida.servicoCodigo);
+    setSubstituir(emitida);
+    setTela("emitir");
+    setModo("uma");
+    setStep(0);
+    setTomadorId(emitida.tomadorId || "");
+    setPlaca(emitida.placa || "");
+    setFinanciado(emitida.financiado || "");
+    setTipo(spec?.id || "apreensao");
+    setDescricao(emitida.descricao || "");
+    setValor(moneyInput(emitida.valorUnitario ?? emitida.valorTotal));
+    setAliquota(emitida.aliquota != null && emitida.aliquota !== "" ? String(emitida.aliquota).replace(".", ",") : "16");
+    setDataFato(isoDia(emitida.dataFato) || todayIso());
+    setDryRun(false);
+    setMotivoSubst("99");
+    setMotivoTexto("Correção dos dados da nota.");
+    setNomesProntos([]);
+    setLocalErr("");
+    setLocalMsg(`Editando a NFS-e ${emitida.numeroNf || ""}. A emissão nova substitui a original.`);
+  };
+
+  const cancelarEdicao = () => {
+    setSubstituir(null);
+    setLocalErr("");
+    setLocalMsg("");
+    setTela("notas");
+  };
+
+  const copyNome = async (nome) => {
+    try {
+      await navigator.clipboard.writeText(nome);
+      setLocalErr("");
+      setLocalMsg(`Nome copiado: ${nome}`);
+    } catch {
+      setLocalErr("Não consegui copiar o nome. Selecione o texto e copie.");
+    }
+  };
 
   const saveTomador = async (event) => {
     event.preventDefault();
@@ -145,63 +354,130 @@ export default function NfsePanel({
     }
   };
 
+  const erroDoFormulario = () => {
+    if (!tomadorId) return "Selecione a assessoria.";
+    if (!placa.trim()) return "Informe a placa.";
+    if (!financiado.trim()) return "Informe o financiado.";
+    if (modo === "uma") {
+      if (!descricao.trim()) return "Cole a descrição.";
+      if (parseMoney(valor) <= 0) return "Informe o valor.";
+      return "";
+    }
+    if (!referente.trim()) return "Cole a descrição do caso.";
+    if (!linhas.length) return "Marque ao menos um tipo de nota.";
+    const semValor = linhas.find((linha) => linha.valor <= 0);
+    if (semValor) return `Informe o valor de ${semValor.tipo.label.toLowerCase()}.`;
+    return "";
+  };
+
   const emit = async (event) => {
     event.preventDefault();
     setLocalErr("");
     setLocalMsg("");
+    setNomesProntos([]);
 
-    if (!tomadorId) {
-      setLocalErr("Selecione um tomador.");
+    const problema = erroDoFormulario();
+    if (problema) {
+      setLocalErr(problema);
       return;
     }
-    if (!servicoCodigo) {
-      setLocalErr("Selecione um serviço.");
+    if (substituir && modo !== "uma") {
+      setLocalErr("A substituição vale para uma nota de cada vez.");
       return;
     }
-    if (!descricao.trim()) {
-      setLocalErr("Informe a descrição.");
-      return;
+    if (substituir && !dryRun) {
+      const seguiu = window.confirm(
+        `Substituir a NFS-e ${substituir.numeroNf || ""}? A nota original deixa de valer quando a nova for autorizada.`,
+      );
+      if (!seguiu) return;
     }
+
+    const comum = {
+      tomadorId,
+      placa,
+      financiado,
+      aliquota: Number(String(aliquota).replace(",", ".")) || undefined,
+      dataFato,
+      dryRun,
+      ...(substituir
+        ? {
+            substituirId: substituir.id,
+            motivoSubst,
+            motivoTexto,
+          }
+        : {}),
+    };
 
     try {
-      const result = await runAction({
-        action: "emit",
-        tomadorId,
-        servicoCodigo,
-        descricao,
-        quantidade: qtd,
-        valorUnitario: unit,
-        aliquota: Number(String(aliquota).replace(",", ".")) || undefined,
-        dataFato,
-        dryRun,
-      });
-
-      const numero = result.emitida?.numeroNf || result.worker?.numeroNf;
-      const status = result.emitida?.status;
-      if (status === "authorized" || result.worker?.ok) {
+      if (modo === "uma") {
+        const result = await runAction({
+          action: "emit",
+          ...comum,
+          tipo,
+          descricao: linhaUnica(descricao),
+          quantidade: 1,
+          valorUnitario: parseMoney(valor),
+        });
+        const nome = result.nomeArquivo || result.emitida?.nomeArquivo;
+        if (nome) setNomesProntos([nome]);
+        if (!dryRun) setSubstituir(null);
+        if (result.avisoSubstituicao) setLocalErr(result.avisoSubstituicao);
         setLocalMsg(
           dryRun
-            ? "Dry-run ok (formulário preenchido, sem confirmar)."
-            : numero
-              ? `Nota ${numero} emitida.`
-              : "Emissão enviada ao portal.",
+            ? substituir
+              ? "DPS de substituição conferida, sem emitir."
+              : "DPS conferida, sem emitir."
+            : nome
+              ? substituir
+                ? `Nota substituta pronta: ${nome}`
+                : `Nota pronta: ${nome}`
+              : "NFS-e enviada à Sefin Nacional.",
         );
-      } else {
-        setLocalMsg(result.worker?.message || "Emissão processada.");
+        return;
       }
+
+      const result = await runAction({
+        action: "emit_lote",
+        ...comum,
+        referente: referente.trim(),
+        notas: linhas.map((linha) => ({
+          tipo: linha.tipo.id,
+          valor: linha.valor,
+          km: linha.tipo.id === "guincho" ? km : "",
+          diarias: linha.tipo.id === "estadias" ? diarias : "",
+        })),
+      });
+      const ok = (result.resultados || []).filter((item) => item.ok);
+      const falha = (result.resultados || []).find((item) => !item.ok);
+      const nomes = ok.map((item) => item.nomeArquivo).filter(Boolean);
+      setNomesProntos(nomes);
+      if (falha && !ok.length) {
+        setLocalErr(falha.error || "Falha ao emitir.");
+        return;
+      }
+      setLocalMsg(
+        falha
+          ? `${ok.length} nota(s) emitida(s). A seguinte parou: ${falha.error}`
+          : dryRun
+            ? `${ok.length} DPS conferida(s), sem emitir.`
+            : `${ok.length} nota(s) emitida(s).`,
+      );
     } catch (err) {
       setLocalErr(err.message || "Falha ao emitir");
     }
   };
 
   const goNext = () => {
-    if (step === 0 && !tomadorId) {
-      setLocalErr("Selecione um tomador.");
+    if (step === 0 && (!tomadorId || !placa.trim() || !financiado.trim())) {
+      setLocalErr("Informe assessoria, placa e financiado.");
       return;
     }
-    if (step === 1 && (!servicoCodigo || !descricao.trim())) {
-      setLocalErr("Selecione o serviço e a descrição.");
-      return;
+    if (step === 1) {
+      const problema = erroDoFormulario();
+      if (problema) {
+        setLocalErr(problema);
+        return;
+      }
     }
     setLocalErr("");
     setStep((s) => Math.min(2, s + 1));
@@ -222,12 +498,15 @@ export default function NfsePanel({
 
   return (
     <div className="nfse-panel">
-      {!phone && (
       <div className="nfse-head">
         <div>
-          <h2>Emissão NFS-e</h2>
+          <h2>{tela === "notas" ? "Notas emitidas" : substituir ? "Substituir NFS-e" : "Emissão NFS-e"}</h2>
           <p className="nfse-sub">
-            Camaçari · portal automatizado
+            {tela === "notas"
+              ? "Veja na tela, baixe ou substitua a nota"
+              : substituir
+                ? `No lugar da NFS-e ${substituir.numeroNf || ""}`
+                : "Sefin Nacional · dados bancários entram sozinhos"}
             {data?.workerConfigured ? "" : " · worker não configurado"}
           </p>
         </div>
@@ -235,10 +514,39 @@ export default function NfsePanel({
           Atualizar
         </button>
       </div>
-      )}
+
+      <div className="nfse-modes" role="tablist" aria-label="NFS-e">
+        <button
+          type="button"
+          className={`nfse-chip${tela === "notas" ? " is-on" : ""}`}
+          onClick={() => setTela("notas")}
+        >
+          Notas
+        </button>
+        <button
+          type="button"
+          className={`nfse-chip${tela === "emitir" ? " is-on" : ""}`}
+          onClick={() => setTela("emitir")}
+        >
+          Emitir
+        </button>
+      </div>
 
       {(error || localErr) && <div className="nfse-banner nfse-banner-error">{localErr || error}</div>}
       {localMsg && <div className="nfse-banner nfse-banner-ok">{localMsg}</div>}
+      {nomesProntos.length > 0 && (
+        <div className="nfse-card">
+          <h3>Nome do arquivo</h3>
+          {nomesProntos.map((nome) => (
+            <div key={nome} className="nfse-nome-row">
+              <code className="nfse-nome">{nome}</code>
+              <button type="button" className="btn btn-ghost" onClick={() => copyNome(nome)}>
+                Copiar
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
 
       {!data?.workerConfigured && (
         <div className="nfse-banner">
@@ -246,265 +554,495 @@ export default function NfsePanel({
         </div>
       )}
 
-      <form className="nfse-form" onSubmit={onSubmit}>
-        {phone && <p className="nfse-step-label">{["Tomador", "Serviço", "Emitir"][step]} · {step + 1} de 3</p>}
-        {(!phone || step === 0) && (
-        <>
-        <label className="nfse-field">
-          <span>Tomador</span>
-          <div className="nfse-row">
-            <select
-              value={tomadorId}
-              onChange={(e) => setTomadorId(e.target.value)}
-              required
-            >
-              <option value="">Selecione…</option>
-              {tomadoresVisiveis.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.razaoSocial || t.documento} ({t.documento})
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              className="btn btn-ghost"
-              onClick={() => setShowTomadorForm((v) => !v)}
-            >
-              {showTomadorForm ? "Fechar" : "+ Tomador"}
-            </button>
+      {tela === "notas" && (
+        <section className="nfse-notas">
+          <div className="nfse-filtros">
+            <label>
+              <span>Assessoria</span>
+              <select value={filtroAssessoria} onChange={(e) => setFiltroAssessoria(e.target.value)}>
+                <option value="">Todas</option>
+                {assessorias.map(([id, nome]) => (
+                  <option key={id} value={id}>
+                    {id} — {nome}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>Data de</span>
+              <input type="date" value={filtroDe} onChange={(e) => setFiltroDe(e.target.value)} />
+            </label>
+            <label>
+              <span>Data até</span>
+              <input type="date" value={filtroAte} onChange={(e) => setFiltroAte(e.target.value)} />
+            </label>
+            {(filtroAssessoria || filtroDe || filtroAte) && (
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => {
+                  setFiltroAssessoria("");
+                  setFiltroDe("");
+                  setFiltroAte("");
+                }}
+              >
+                Limpar
+              </button>
+            )}
           </div>
-        </label>
+          <div className="nfse-notas-bar">
+            <p>{emitidasVisiveis.length} nota(s)</p>
+            {emitidasVisiveis.some((e) => e.status === "authorized" && e.pdf) && (
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() =>
+                  emitidasVisiveis
+                    .filter((e) => e.status === "authorized" && e.pdf)
+                    .forEach(baixarArquivo)
+                }
+              >
+                Baixar todas
+              </button>
+            )}
+          </div>
+          {!emitidasVisiveis.length && (
+            <p className="nfse-hint">
+              {emitidas.length ? "Nenhuma nota com esse filtro." : "Nenhuma nota emitida ainda."}
+            </p>
+          )}
+          {emitidasVisiveis.map((e) => {
+            const nome = nomeDownload(e);
+            const tipoNotaItem = TIPOS_NOTA.find((t) => t.id === e.tipo)?.label || e.tipo || e.servicoCodigo;
+            const original = e.chaveSubstituida
+              ? emitidas.find((item) => item.chaveAcesso === e.chaveSubstituida)
+              : null;
+            return (
+              <article key={e.id} className="nfse-nota">
+                <div>
+                  <strong className="nfse-nota-num">
+                    NFS-e {e.numeroNf || "—"} · {formatBRL(e.valorTotal || 0)}
+                  </strong>
+                  <p>
+                    {tipoNotaItem}
+                    {e.placa ? ` · ${e.placa}` : ""}
+                    {e.financiado ? ` · ${e.financiado}` : ""}
+                  </p>
+                  <p className="nfse-hint">
+                    {e.tomadorId || e.tomadorNome} · {e.dataFato} · {statusNota(e)}
+                    {e.erro ? ` · ${e.erro}` : ""}
+                  </p>
+                  {original?.numeroNf && <p className="nfse-hint">Substitui a NFS-e {original.numeroNf}</p>}
+                  <p className="nfse-nota-nome">{nome}</p>
+                </div>
+                <div className="nfse-nota-actions">
+                  {podeVerPdf(e) && (
+                    <button type="button" className="btn btn-primary" onClick={() => verNota(e)} disabled={abrindoPdf === e.id}>
+                      {abrindoPdf === e.id ? "Abrindo…" : "Ver"}
+                    </button>
+                  )}
+                  {podeVerPdf(e) && (
+                    <button type="button" className="btn btn-ghost" onClick={() => baixarNota(e)} disabled={abrindoPdf === e.id}>
+                      Baixar
+                    </button>
+                  )}
+                  {podeSubstituir(e) && (
+                    <button type="button" className="btn btn-ghost" onClick={() => editarNota(e)}>
+                      Editar
+                    </button>
+                  )}
+                  <button type="button" className="btn btn-ghost" onClick={() => copyNome(nome.replace(/\.pdf$/i, ""))}>
+                    Copiar nome
+                  </button>
+                </div>
+              </article>
+            );
+          })}
+        </section>
+      )}
 
-        {selectedTomador && (
-          <p className="nfse-hint">
-            {selectedTomador.logradouro}
-            {selectedTomador.numero ? `, ${selectedTomador.numero}` : ""}
-            {selectedTomador.municipio
-              ? ` · ${selectedTomador.municipio}/${selectedTomador.uf}`
-              : ""}
-          </p>
-        )}
-
-        {showTomadorForm && (
-          <div className="nfse-card">
-            <h3>Novo tomador</h3>
-            <div className="nfse-grid">
-              <label>
-                <span>Tipo</span>
-                <select
-                  value={tomadorForm.tipo}
-                  onChange={(e) =>
-                    setTomadorForm((p) => ({ ...p, tipo: e.target.value }))
-                  }
-                >
-                  <option value="CNPJ">CNPJ</option>
-                  <option value="CPF">CPF</option>
-                </select>
-              </label>
-              <label>
-                <span>Documento</span>
-                <input
-                  value={tomadorForm.documento}
-                  onChange={(e) =>
-                    setTomadorForm((p) => ({ ...p, documento: e.target.value }))
-                  }
-                  required
-                />
-              </label>
-              <label className="nfse-span-2">
-                <span>Razão social</span>
-                <input
-                  value={tomadorForm.razaoSocial}
-                  onChange={(e) =>
-                    setTomadorForm((p) => ({ ...p, razaoSocial: e.target.value }))
-                  }
-                  required
-                />
-              </label>
-              <label className="nfse-span-2">
-                <span>Logradouro</span>
-                <input
-                  value={tomadorForm.logradouro}
-                  onChange={(e) =>
-                    setTomadorForm((p) => ({ ...p, logradouro: e.target.value }))
-                  }
-                />
-              </label>
-              <label>
-                <span>Número</span>
-                <input
-                  value={tomadorForm.numero}
-                  onChange={(e) =>
-                    setTomadorForm((p) => ({ ...p, numero: e.target.value }))
-                  }
-                />
-              </label>
-              <label>
-                <span>Bairro</span>
-                <input
-                  value={tomadorForm.bairro}
-                  onChange={(e) =>
-                    setTomadorForm((p) => ({ ...p, bairro: e.target.value }))
-                  }
-                />
-              </label>
-              <label>
-                <span>Município</span>
-                <input
-                  value={tomadorForm.municipio}
-                  onChange={(e) =>
-                    setTomadorForm((p) => ({ ...p, municipio: e.target.value }))
-                  }
-                />
-              </label>
-              <label>
-                <span>UF</span>
-                <input
-                  value={tomadorForm.uf}
-                  maxLength={2}
-                  onChange={(e) =>
-                    setTomadorForm((p) => ({
-                      ...p,
-                      uf: e.target.value.toUpperCase(),
-                    }))
-                  }
-                />
-              </label>
-              <label>
-                <span>CEP</span>
-                <input
-                  value={tomadorForm.cep}
-                  onChange={(e) =>
-                    setTomadorForm((p) => ({ ...p, cep: e.target.value }))
-                  }
-                />
-              </label>
-            </div>
+      {tela === "emitir" && <form className="nfse-form" onSubmit={onSubmit}>
+        {substituir && (
+          <div className="nfse-banner">
+            Esta emissão substitui a NFS-e {substituir.numeroNf || substituir.id}. A original deixa de valer quando a nova for autorizada.
             <div className="nfse-actions">
-              <button type="button" className="btn btn-primary" onClick={saveTomador} disabled={saving}>
-                Salvar tomador
+              <button type="button" className="btn btn-ghost" onClick={cancelarEdicao}>
+                Cancelar edição
               </button>
             </div>
           </div>
         )}
-        </>
+        {phone && (
+          <p className="nfse-step-label">
+            {["Caso", "Notas", "Emitir"][step]} · {step + 1} de 3
+          </p>
+        )}
+
+        {(!phone || step === 0) && (
+          <>
+            {!substituir && (
+            <div className="nfse-modes" role="group" aria-label="Quantidade de notas">
+              <button
+                type="button"
+                className={`nfse-chip${modo === "uma" ? " is-on" : ""}`}
+                onClick={() => setModo("uma")}
+              >
+                Uma nota
+              </button>
+              <button
+                type="button"
+                className={`nfse-chip${modo === "varias" ? " is-on" : ""}`}
+                onClick={() => setModo("varias")}
+              >
+                Várias do mesmo caso
+              </button>
+            </div>
+            )}
+
+            <label className="nfse-field">
+              <span>Assessoria</span>
+              <div className="nfse-row">
+                <select value={tomadorId} onChange={(e) => setTomadorId(e.target.value)} required>
+                  <option value="">Selecione…</option>
+                  {tomadoresVisiveis.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.id} — {t.razaoSocial || t.documento}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={() => setShowTomadorForm((v) => !v)}
+                >
+                  {showTomadorForm ? "Fechar" : "+ Tomador"}
+                </button>
+              </div>
+            </label>
+
+            {selectedTomador && (
+              <p className="nfse-hint">
+                {selectedTomador.logradouro}
+                {selectedTomador.numero ? `, ${selectedTomador.numero}` : ""}
+                {selectedTomador.municipio
+                  ? ` · ${selectedTomador.municipio}/${selectedTomador.uf}`
+                  : ""}
+              </p>
+            )}
+
+            <div className="nfse-grid">
+              <label>
+                <span>Placa</span>
+                <input
+                  value={placa}
+                  onChange={(e) => setPlaca(e.target.value.toUpperCase())}
+                  placeholder="PLB2379"
+                  required
+                />
+              </label>
+              <label>
+                <span>Financiado</span>
+                <input
+                  value={financiado}
+                  onChange={(e) => setFinanciado(e.target.value)}
+                  placeholder="Nome do financiado"
+                  required
+                />
+              </label>
+            </div>
+
+            {showTomadorForm && (
+              <div className="nfse-card">
+                <h3>Novo tomador</h3>
+                <div className="nfse-grid">
+                  <label>
+                    <span>Tipo</span>
+                    <select
+                      value={tomadorForm.tipo}
+                      onChange={(e) => setTomadorForm((p) => ({ ...p, tipo: e.target.value }))}
+                    >
+                      <option value="CNPJ">CNPJ</option>
+                      <option value="CPF">CPF</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>Documento</span>
+                    <input
+                      value={tomadorForm.documento}
+                      onChange={(e) => setTomadorForm((p) => ({ ...p, documento: e.target.value }))}
+                      required
+                    />
+                  </label>
+                  <label className="nfse-span-2">
+                    <span>Razão social</span>
+                    <input
+                      value={tomadorForm.razaoSocial}
+                      onChange={(e) => setTomadorForm((p) => ({ ...p, razaoSocial: e.target.value }))}
+                      required
+                    />
+                  </label>
+                  <label className="nfse-span-2">
+                    <span>Logradouro</span>
+                    <input
+                      value={tomadorForm.logradouro}
+                      onChange={(e) => setTomadorForm((p) => ({ ...p, logradouro: e.target.value }))}
+                    />
+                  </label>
+                  <label>
+                    <span>Número</span>
+                    <input
+                      value={tomadorForm.numero}
+                      onChange={(e) => setTomadorForm((p) => ({ ...p, numero: e.target.value }))}
+                    />
+                  </label>
+                  <label>
+                    <span>Bairro</span>
+                    <input
+                      value={tomadorForm.bairro}
+                      onChange={(e) => setTomadorForm((p) => ({ ...p, bairro: e.target.value }))}
+                    />
+                  </label>
+                  <label>
+                    <span>Município</span>
+                    <input
+                      value={tomadorForm.municipio}
+                      onChange={(e) => setTomadorForm((p) => ({ ...p, municipio: e.target.value }))}
+                    />
+                  </label>
+                  <label>
+                    <span>UF</span>
+                    <input
+                      value={tomadorForm.uf}
+                      maxLength={2}
+                      onChange={(e) =>
+                        setTomadorForm((p) => ({ ...p, uf: e.target.value.toUpperCase() }))
+                      }
+                    />
+                  </label>
+                  <label>
+                    <span>CEP</span>
+                    <input
+                      value={tomadorForm.cep}
+                      onChange={(e) => setTomadorForm((p) => ({ ...p, cep: e.target.value }))}
+                    />
+                  </label>
+                </div>
+                <div className="nfse-actions">
+                  <button type="button" className="btn btn-primary" onClick={saveTomador} disabled={saving}>
+                    Salvar tomador
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
         )}
 
         {(!phone || step === 1) && (
-        <>
-        <label className="nfse-field">
-          <span>Serviço</span>
-          <select
-            value={servicoCodigo}
-            onChange={(e) => {
-              setServicoCodigo(e.target.value);
-              setDescricao("");
-            }}
-            required
-          >
-            <option value="">Selecione…</option>
-            {servicos.map((s) => (
-              <option key={s.codigo} value={s.codigo}>
-                {s.codigo} · CNAE {s.cnae}
-              </option>
-            ))}
-          </select>
-        </label>
+          <>
+            {modo === "uma" ? (
+              <>
+                <div className="nfse-modes" role="group" aria-label="Tipo da nota">
+                  {TIPOS_NOTA.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      className={`nfse-chip${tipo === item.id ? " is-on" : ""}`}
+                      onClick={() => setTipo(item.id)}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+                <p className="nfse-hint">{codigoDe(TIPOS_NOTA.find((t) => t.id === tipo)?.codigo)}</p>
+                <label className="nfse-field">
+                  <span>Valor</span>
+                  <input
+                    value={valor}
+                    onChange={(e) => setValor(e.target.value)}
+                    inputMode="decimal"
+                    placeholder="0,00"
+                    required
+                  />
+                </label>
+                <label className="nfse-field">
+                  <span>Descrição</span>
+                  <textarea
+                    rows={4}
+                    value={descricao}
+                    onChange={(e) => setDescricao(e.target.value)}
+                    placeholder="Cole a descrição do serviço"
+                    required
+                  />
+                </label>
+              </>
+            ) : (
+              <>
+                <label className="nfse-field">
+                  <span>Descrição do caso</span>
+                  <textarea
+                    rows={4}
+                    value={referente}
+                    onChange={(e) => setReferente(e.target.value)}
+                    placeholder="VEICULO - [MARCA/MODELO] - PLACA: … CHASSI: …"
+                    required
+                  />
+                </label>
+                <p className="nfse-hint">
+                  Cada nota recebe o prefixo do serviço. KM e diárias só entram se você preencher.
+                </p>
+                <div className="nfse-tipos">
+                  {TIPOS_NOTA.map((item) => (
+                    <div key={item.id} className={`nfse-tipo${checks[item.id] ? " is-on" : ""}`}>
+                      <label className="nfse-check">
+                        <input
+                          type="checkbox"
+                          checked={checks[item.id]}
+                          onChange={(e) =>
+                            setChecks((prev) => ({ ...prev, [item.id]: e.target.checked }))
+                          }
+                        />
+                        <span>
+                          {item.label}
+                          <small> {codigoDe(item.codigo)}</small>
+                        </span>
+                      </label>
+                      {checks[item.id] && (
+                        <>
+                          <label>
+                            <span>Valor</span>
+                            <input
+                              value={valores[item.id]}
+                              onChange={(e) =>
+                                setValores((prev) => ({ ...prev, [item.id]: e.target.value }))
+                              }
+                              inputMode="decimal"
+                              placeholder="0,00"
+                            />
+                          </label>
+                          {item.id === "guincho" && (
+                            <label>
+                              <span>KM utilizado (opcional)</span>
+                              <input
+                                value={km}
+                                onChange={(e) => setKm(e.target.value)}
+                                placeholder="59,3"
+                              />
+                            </label>
+                          )}
+                          {item.id === "estadias" && (
+                            <label>
+                              <span>Nº de diárias (opcional)</span>
+                              <input
+                                value={diarias}
+                                onChange={(e) => setDiarias(e.target.value)}
+                                placeholder="10"
+                              />
+                            </label>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
 
-        {selectedServico && (
-          <p className="nfse-hint">
-            CNAE {selectedServico.cnae}
-            {selectedServico.servicoDescricao
-              ? ` — ${selectedServico.servicoDescricao}`
-              : ""}
-          </p>
-        )}
-
-        <div className="nfse-grid">
-          <label>
-            <span>Data fato gerador</span>
-            <input type="date" value={dataFato} onChange={(e) => setDataFato(e.target.value)} />
-          </label>
-          <label>
-            <span>Alíquota (%)</span>
-            <input
-              value={aliquota}
-              onChange={(e) => setAliquota(e.target.value)}
-              inputMode="decimal"
-            />
-          </label>
-          <label>
-            <span>Quantidade</span>
-            <input
-              value={quantidade}
-              onChange={(e) => setQuantidade(e.target.value)}
-              inputMode="decimal"
-              required
-            />
-          </label>
-          <label>
-            <span>Valor unitário</span>
-            <input
-              value={valorUnitario}
-              onChange={(e) => setValorUnitario(e.target.value)}
-              inputMode="decimal"
-              required
-            />
-          </label>
-        </div>
-
-        <label className="nfse-field">
-          <span>Descrição do serviço</span>
-          <textarea
-            rows={4}
-            value={descricao}
-            onChange={(e) => setDescricao(e.target.value)}
-            placeholder="ESTADIAS REFERENTE AO VEICULO - [MODELO] - PLACA: …"
-          required
-        />
-        </label>
-        </>
+            <div className="nfse-grid">
+              <label>
+                <span>Data fato gerador</span>
+                <input type="date" value={dataFato} onChange={(e) => setDataFato(e.target.value)} />
+              </label>
+              <label>
+                <span>Alíquota do Simples (%)</span>
+                <input
+                  value={aliquota}
+                  onChange={(e) => setAliquota(e.target.value)}
+                  inputMode="decimal"
+                />
+              </label>
+            </div>
+          </>
         )}
 
         {(!phone || step === 2) && (
-        <>
-        <div className="nfse-card">
-          <h3>Preview dos itens</h3>
-          <div className="nfse-items">
-            {previewItems.map((item) => (
-              <div key={item.label} className="nfse-item">
-                <div className="nfse-item-top">
-                  <strong>{item.label}</strong>
-                  <span>{formatBRL(item.valorTotal)}</span>
-                </div>
-                <pre className="nfse-item-desc">{item.descricao}</pre>
-                <div className="nfse-item-meta">
-                  Qtd {item.quantidade} · Unit {formatBRL(item.valorUnitario)}
+          <>
+            <div className="nfse-card">
+              <h3>{linhas.length > 1 ? "Preview das notas" : "Preview da nota"}</h3>
+              <div className="nfse-items">
+                {linhas.map((linha) => (
+                  <div key={linha.tipo?.id || "nota"} className="nfse-item">
+                    <div className="nfse-item-top">
+                      <strong>{linha.tipo?.label || "Nota"}</strong>
+                      <span>{formatBRL(linha.valor)}</span>
+                    </div>
+                    <pre className="nfse-item-desc">{linha.descricao || "—"}</pre>
+                    <p className="nfse-nome">{linha.nome || "Nº - PLACA - FINANCIADO - ASSESSORIA"}</p>
+                  </div>
+                ))}
+                <div className="nfse-item">
+                  <div className="nfse-item-top">
+                    <strong>Dados bancários</strong>
+                    <span>{formatBRL(0)}</span>
+                  </div>
+                  <pre className="nfse-item-desc">{bankText || "—"}</pre>
+                  <div className="nfse-item-meta">Entra em toda nota · qtd 0 · valor 0</div>
                 </div>
               </div>
-            ))}
-          </div>
-          <p className="nfse-total">
-            Total da nota: <strong>{formatBRL(total)}</strong>
-          </p>
-        </div>
+              <p className="nfse-total">
+                Soma: <strong>{formatBRL(total)}</strong>
+              </p>
+            </div>
 
-        <label className="nfse-check">
-          <input
-            type="checkbox"
-            checked={dryRun}
-            onChange={(e) => setDryRun(e.target.checked)}
-          />
-          <span>Dry-run (preenche o portal sem confirmar)</span>
-        </label>
+            <label className="nfse-check">
+              <input
+                type="checkbox"
+                checked={dryRun}
+                onChange={(e) => setDryRun(e.target.checked)}
+              />
+              <span>Conferir a DPS sem emitir</span>
+            </label>
 
-        <div className="nfse-actions">
-          <button type="submit" className="btn btn-primary" disabled={saving}>
-            {saving ? "Emitindo…" : dryRun ? "Testar preenchimento" : "Emitir NFS-e"}
-          </button>
-        </div>
-        </>
+            {substituir && (
+              <div className="nfse-grid">
+                <label className="nfse-span-2">
+                  <span>Motivo da substituição</span>
+                  <select value={motivoSubst} onChange={(e) => setMotivoSubst(e.target.value)}>
+                    {MOTIVOS_SUBSTITUICAO.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.id} — {item.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {motivoSubst === "99" && (
+                  <label className="nfse-span-2">
+                    <span>Texto do motivo</span>
+                    <input
+                      value={motivoTexto}
+                      onChange={(e) => setMotivoTexto(e.target.value)}
+                      maxLength={255}
+                    />
+                  </label>
+                )}
+              </div>
+            )}
+
+            <div className="nfse-actions">
+              <button type="submit" className="btn btn-primary" disabled={saving}>
+                {saving
+                  ? "Emitindo…"
+                  : dryRun
+                    ? "Conferir DPS"
+                    : substituir
+                      ? "Substituir NFS-e"
+                      : linhas.length > 1
+                        ? `Emitir ${linhas.length} notas`
+                        : "Emitir NFS-e"}
+              </button>
+            </div>
+          </>
         )}
+
         {phone && (
           <div className="nfse-step-nav">
             {step > 0 && (
@@ -526,32 +1064,35 @@ export default function NfsePanel({
             )}
           </div>
         )}
-      </form>
-
-      {(!phone || step === 2) && (
-      <section className="nfse-history">
-        <h3>Últimas emissões</h3>
-        {!emitidasVisiveis.length && <p className="nfse-hint">Nenhuma emissão ainda.</p>}
-        <div className="nfse-history-list">
-          {emitidasVisiveis.map((e) => (
-            <article key={e.id} className="nfse-history-item">
-              <div className="nfse-item-top">
-                <strong>
-                  {e.numeroNf ? `NF ${e.numeroNf}` : e.status}
-                </strong>
-                <span>{formatBRL(e.valorTotal || 0)}</span>
+      </form>}
+      {pdfAberto && (
+        <div className="nfse-viewer" role="dialog" aria-modal="true" aria-label="Nota fiscal">
+          <div className="nfse-viewer-card">
+            <div className="nfse-viewer-bar">
+              <strong>{pdfAberto.nome}</strong>
+              <div className="nfse-nota-actions">
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={() => {
+                    const link = document.createElement("a");
+                    link.href = `/api/nfse/pdf?id=${encodeURIComponent(pdfAberto.id)}`;
+                    link.download = pdfAberto.nome;
+                    document.body.appendChild(link);
+                    link.click();
+                    link.remove();
+                  }}
+                >
+                  Baixar
+                </button>
+                <button type="button" className="btn btn-primary" onClick={() => setPdfAberto(null)}>
+                  Fechar
+                </button>
               </div>
-              <p>
-                {e.tomadorNome || e.tomadorId} · {e.servicoCodigo}
-              </p>
-              <p className="nfse-hint">
-                {e.dataFato} · {e.status}
-                {e.erro ? ` · ${e.erro}` : ""}
-              </p>
-            </article>
-          ))}
+            </div>
+            <iframe title={pdfAberto.nome} src={`/api/nfse/pdf?id=${encodeURIComponent(pdfAberto.id)}&inline=1&v=${pdfAberto.abertoEm || ""}`} />
+          </div>
         </div>
-      </section>
       )}
     </div>
   );

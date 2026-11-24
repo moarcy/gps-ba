@@ -1,5 +1,6 @@
 import dotenv from "dotenv";
 import ExcelJS from "exceljs";
+import fs from "node:fs";
 import http from "node:http";
 import { URL } from "node:url";
 import { downloadExcel } from "./excel-drive-client.js";
@@ -9,8 +10,9 @@ import { loginWithPassword, listUsers } from "./lib/access-store.js";
 import { dispatchCrmAction, getCrmData, previewWhatsapp } from "./lib/crm-service.js";
 import { buildDashboardPayload } from "./lib/dashboard-data.js";
 import { handleIlocWebhook } from "./lib/iloc-webhook.js";
+import { fotoArquivo } from "./lib/bira-fotos.js";
 import { getLocalizadosData, ingestLocgramHit, updatePosicao } from "./lib/localizados-service.js";
-import { emitNfse, getNfseData, upsertTomador } from "./lib/nfse-service.js";
+import { baixarPdfEmitida, emitNfse, emitNfseLote, getNfseData, pdfEmitida, upsertTomador } from "./lib/nfse-service.js";
 import { getRadarData } from "./lib/radar-service.js";
 import {
   mergeControleRecords,
@@ -154,6 +156,23 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (url.pathname === "/api/localizados/foto" && req.method === "GET") {
+      requireAdmin(req);
+      const file = fotoArquivo(url.searchParams.get("placa"));
+      if (!file) {
+        sendJson(res, 404, { error: "Sem foto desta placa." });
+        return;
+      }
+      const body = fs.readFileSync(file);
+      res.writeHead(200, {
+        "Content-Type": "image/jpeg",
+        "Content-Length": body.length,
+        "Cache-Control": "private, max-age=86400",
+      });
+      res.end(body);
+      return;
+    }
+
     if (url.pathname === "/api/localizados" && req.method === "GET") {
       requireAdmin(req);
       const force = url.searchParams.get("refresh") === "1";
@@ -179,6 +198,28 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (url.pathname === "/api/nfse/pdf" && req.method === "GET") {
+      requireAdmin(req);
+      const pdf = await pdfEmitida(url.searchParams.get("id"));
+      if (!pdf) {
+        sendJson(res, 404, { error: "PDF desta nota ainda não está no sistema." });
+        return;
+      }
+      const body = fs.readFileSync(pdf.file);
+      const filename = `${pdf.nomeArquivo}.pdf`;
+      const ascii = filename.replace(/[^\x20-\x7E]/g, "_").replace(/["\\]/g, "");
+      const encoded = encodeURIComponent(filename);
+      const inline = url.searchParams.get("inline") === "1";
+      res.writeHead(200, {
+        "Content-Type": "application/pdf",
+        "Content-Length": body.length,
+        "Content-Disposition": `${inline ? "inline" : "attachment"}; filename="${ascii}"; filename*=UTF-8''${encoded}`,
+        "Cache-Control": inline ? "private, no-store" : "private, max-age=86400",
+      });
+      res.end(body);
+      return;
+    }
+
     if (url.pathname === "/api/nfse" && req.method === "GET") {
       requireAdmin(req);
       sendJson(res, 200, await getNfseData());
@@ -200,7 +241,17 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      sendJson(res, 400, { error: "action inválida. Use: emit | upsert_tomador" });
+      if (action === "emit_lote" || action === "emitir_lote") {
+        sendJson(res, 200, await emitNfseLote(body));
+        return;
+      }
+
+      if (action === "baixar_pdf") {
+        sendJson(res, 200, await baixarPdfEmitida(body));
+        return;
+      }
+
+      sendJson(res, 400, { error: "action inválida. Use: emit | emit_lote | baixar_pdf | upsert_tomador" });
       return;
     }
 
@@ -233,8 +284,10 @@ server.listen(PORT, "127.0.0.1", () => {
   console.log(`  POST /api/crm`);
   console.log(`  POST /api/vehicles`);
   console.log(`  GET  /api/nfse`);
+  console.log(`  GET  /api/nfse/pdf`);
   console.log(`  POST /api/nfse`);
   console.log(`  GET  /api/localizados`);
+  console.log(`  GET  /api/localizados/foto`);
   console.log(`  POST /api/localizados`);
   console.log(`  POST /api/webhooks/iloc`);
 });

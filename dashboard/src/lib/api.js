@@ -8,12 +8,19 @@ export function loadSession() {
   }
 }
 
+function writeSessionCookie(token) {
+  if (!token) return;
+  document.cookie = `gpsba=${encodeURIComponent(token)}; Path=/; SameSite=Lax`;
+}
+
 export function saveSession(session) {
   localStorage.setItem(KEY, JSON.stringify(session));
+  writeSessionCookie(session?.token);
 }
 
 export function clearSession() {
   localStorage.removeItem(KEY);
+  document.cookie = "gpsba=; Path=/; Max-Age=0; SameSite=Lax";
 }
 
 export function authHeaders(extra = {}) {

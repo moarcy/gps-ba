@@ -1,11 +1,32 @@
 import { classifyMotivo, isFeiraCorridor } from "./filter.js";
 import { ingestSourceMessage, serializeIngest, shouldNotifyMissed } from "./ingest.js";
 
+const chatCache = new Map();
+
+export function forgetChat(sourceChatId) {
+  chatCache.delete(String(sourceChatId || "").trim());
+}
+
 export async function resolveChat(client, sourceChatId) {
-  const dialogs = await client.getDialogs({ limit: 200 });
-  const found = dialogs.find((d) => String(d.id) === String(sourceChatId));
-  if (found?.entity) return found.entity;
-  return client.getEntity(/^-?\d+$/.test(String(sourceChatId)) ? Number(sourceChatId) : sourceChatId);
+  const key = String(sourceChatId || "").trim();
+  if (!key) throw new Error("TELEGRAM_SOURCE_CHAT_ID vazio");
+  const cached = chatCache.get(key);
+  if (cached) return cached;
+
+  const id = /^-?\d+$/.test(key) ? Number(key) : key;
+  let entity = null;
+  try {
+    entity = await client.getEntity(id);
+  } catch {
+    entity = null;
+  }
+  if (!entity) {
+    const dialogs = await client.getDialogs({ limit: 200 });
+    entity = dialogs.find((d) => String(d.id) === key)?.entity || null;
+  }
+  if (!entity) entity = await client.getEntity(id);
+  chatCache.set(key, entity);
+  return entity;
 }
 
 async function notifyStoredMissed(store, onKeep, { maxAgeHours }) {
@@ -89,6 +110,9 @@ export async function catchUpHistory({
       },
     });
     stored += result.stored || 0;
+    if (typeof store.setLastSourceMessageId === "function") {
+      await store.setLastSourceMessageId(msg.id);
+    }
   }
 
   if (typeof store.setLastSourceMessageId === "function" && maxId) {
@@ -115,17 +139,25 @@ export function startCatchUpLoop({
   store,
   sourceChatId,
   onKeep,
-  intervalMs = Number(process.env.RADAR_POLL_MS || 30000),
+  intervalMs = Number(process.env.RADAR_POLL_MS || 5 * 60 * 1000),
+  limit = Number(process.env.RADAR_POLL_LIMIT || 40),
 }) {
   let running = false;
+  console.log(
+    `Catch-up de segurança a cada ${Math.round(intervalMs / 1000)}s (no máximo ${limit} mensagens). O ao vivo segue pelo evento.`,
+  );
   const tick = async () => {
     if (running) return;
-    if (client.connected === false || client.disconnected === true) {
-      console.error("Telegram desconectou. Reiniciando o radar…");
-      process.exit(1);
-    }
     running = true;
     try {
+      if (client.connected === false) {
+        try {
+          await client.connect();
+        } catch (err) {
+          console.error("Telegram desconectado. Nova tentativa no próximo ciclo:", err.message || err);
+          return;
+        }
+      }
       await serializeIngest(() =>
         catchUpHistory({
           client,
@@ -133,13 +165,13 @@ export function startCatchUpLoop({
           sourceChatId,
           onKeep,
           quiet: true,
+          limit,
+          backfillStored: false,
         }),
       );
     } catch (err) {
+      forgetChat(sourceChatId);
       console.error("Catch-up periódico falhou:", err.message || err);
-      if (/disconnect|not connected|timeout|AUTH_KEY/i.test(String(err.message || err))) {
-        process.exit(1);
-      }
     } finally {
       running = false;
     }

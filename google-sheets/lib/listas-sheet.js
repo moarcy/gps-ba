@@ -195,6 +195,8 @@ export function applyControleListValidations(worksheet, lastDataRow) {
     allowBlank: true,
     showErrorMessage: false,
     showInputMessage: false,
+    // warning deixa digitar um valor novo. "stop" trava a célula no Google Planilhas.
+    errorStyle: "warning",
   };
 
   worksheet.dataValidations.add(`B${DATA_START}:B${lastDataRow}`, {

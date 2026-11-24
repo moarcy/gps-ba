@@ -22,9 +22,11 @@ export async function startListener({
   onKeep,
 }) {
   const client = new TelegramClient(new StringSession(session), apiId, apiHash, {
-    connectionRetries: Infinity,
-    reconnectRetries: Infinity,
+    connectionRetries: 5,
+    reconnectRetries: 3,
+    retryDelay: 5000,
     autoReconnect: true,
+    timeout: 20,
   });
 
   await client.connect();

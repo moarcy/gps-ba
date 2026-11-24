@@ -21,6 +21,8 @@ google-sheets/.cache/
 google-sheets/data/iloc-events.jsonl
 google-sheets/data/iloc-events.seen
 google-sheets/nfse-worker/screenshots/
+google-sheets/nfse-worker/notas/
+google-sheets/nfse-worker/data/
 **/credentials.json
 **/*.pem
 **/*.pfx

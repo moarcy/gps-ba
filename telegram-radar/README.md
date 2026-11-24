@@ -143,7 +143,7 @@ Feche o radar (`start-radar.cmd`) enquanto o import roda, se a sessão recusar d
 
 O Telegram guarda o Painel RK na nuvem. Ao ligar, o radar puxa as mensagens novas, grava no histórico e avisa GO Feira de até **4 horas** (marcados como atrasado). Mais antigo que isso só entra no mapa, sem alertar a rua.
 
-Se o Node cair com o PC ligado, o `start-radar.cmd` sobe de novo em 10s. No login do Windows o atalho de inicialização chama esse mesmo script.
+Se o Node cair com o PC ligado, o `start-radar.cmd` sobe de novo em 60s. No login do Windows o atalho de inicialização chama esse mesmo script. O ao vivo chega pelo evento do Telegram; a releitura do grupo é só uma rede de segurança, a cada 5 minutos e no máximo 40 mensagens.
 
 ```powershell
 cd "C:\Users\moarc\OneDrive\Área de Trabalho\GPS BA\telegram-radar"

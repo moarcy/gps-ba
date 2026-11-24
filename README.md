@@ -71,12 +71,12 @@ Aba **NFS-e** no app. Catálogos nas abas `NFS-e Tomadores`, `NFS-e Servicos`, `
 - `GET /api/nfse` — tomadores, serviços, config, histórico
 - `POST /api/nfse` — `action`: `emit` | `upsert_tomador`
 
-A emissão real usa um **worker Playwright** (portal com login/senha), fora da Vercel:
+A emissão real usa um **worker Playwright** no Emissor Nacional (certificado A1), fora da Vercel:
 
 ```bash
 cd google-sheets/nfse-worker
 npm install && npm run install:browsers
-# configure .env com NFSE_PORTAL_USER / NFSE_PORTAL_PASSWORD
+# configure .env com NFSE_CERT_PATH / NFSE_CERT_PASSWORD
 npm start
 ```
 

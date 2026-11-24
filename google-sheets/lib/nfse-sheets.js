@@ -3,6 +3,7 @@ import {
   DATA_START,
   DEFAULT_CONFIG,
   DEFAULT_SERVICOS,
+  DEFAULT_TOMADORES,
   EMITIDA_HEADERS,
   HEADER_ROW,
   NFSE_CONFIG_SHEET,
@@ -58,8 +59,19 @@ export function ensureNfseSheets(workbook) {
 
   seedConfigIfEmpty(config);
   seedServicosIfEmpty(servicos);
+  seedMissingTomadores(tomadores);
 
   return { tomadores, servicos, config, emitidas };
+}
+
+function seedMissingTomadores(ws) {
+  const existing = new Set(readTomadores(ws).map((t) => t.documento));
+  for (const tomador of DEFAULT_TOMADORES) {
+    const documento = onlyDigits(tomador.documento);
+    if (!documento || existing.has(documento)) continue;
+    upsertTomadorRow(ws, tomador);
+    existing.add(documento);
+  }
 }
 
 function seedConfigIfEmpty(ws) {
@@ -161,6 +173,13 @@ export function readEmitidas(ws, { limit = 50 } = {}) {
       aliquota: asNumber(cellValue(ws.getCell(row, 13))),
       dataFato: normalizeText(cellValue(ws.getCell(row, 14))),
       erro: normalizeText(cellValue(ws.getCell(row, 15))),
+      tipo: normalizeText(cellValue(ws.getCell(row, 16))),
+      placa: normalizeText(cellValue(ws.getCell(row, 17))),
+      financiado: normalizeText(cellValue(ws.getCell(row, 18))),
+      nomeArquivo: normalizeText(cellValue(ws.getCell(row, 19))),
+      chaveAcesso: normalizeText(cellValue(ws.getCell(row, 20))),
+      chaveSubstituida: normalizeText(cellValue(ws.getCell(row, 21))),
+      substituidaPor: normalizeText(cellValue(ws.getCell(row, 22))),
       _row: row,
     });
   }
@@ -237,6 +256,13 @@ export function appendEmitidaRow(ws, emitida) {
     emitida.aliquota ?? "",
     emitida.dataFato || "",
     emitida.erro || "",
+    emitida.tipo || "",
+    emitida.placa || "",
+    emitida.financiado || "",
+    emitida.nomeArquivo || "",
+    emitida.chaveAcesso || "",
+    emitida.chaveSubstituida || "",
+    emitida.substituidaPor || "",
   ];
   values.forEach((value, i) => {
     ws.getRow(row).getCell(i + 1).value = value;
@@ -266,6 +292,13 @@ export function updateEmitidaRow(ws, id, patch) {
     merged.aliquota ?? "",
     merged.dataFato || "",
     merged.erro || "",
+    merged.tipo || "",
+    merged.placa || "",
+    merged.financiado || "",
+    merged.nomeArquivo || "",
+    merged.chaveAcesso || "",
+    merged.chaveSubstituida || "",
+    merged.substituidaPor || "",
   ];
   values.forEach((value, i) => {
     ws.getRow(found._row).getCell(i + 1).value = value;

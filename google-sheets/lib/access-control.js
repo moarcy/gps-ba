@@ -96,10 +96,18 @@ export function readSession(token, now = Date.now()) {
   };
 }
 
-export function actorFromRequest(req) {
+function tokenFromRequest(req) {
   const header = req?.headers?.authorization || req?.headers?.Authorization || "";
   const match = String(header).match(/^Bearer\s+(\S+)/i);
-  const actor = match ? readSession(match[1]) : null;
+  if (match) return match[1];
+  const cookie = String(req?.headers?.cookie || "");
+  const found = cookie.match(/(?:^|;\s*)gpsba=([^;]+)/);
+  return found ? decodeURIComponent(found[1]) : "";
+}
+
+export function actorFromRequest(req) {
+  const token = tokenFromRequest(req);
+  const actor = token ? readSession(token) : null;
   if (!actor) {
     const err = new Error("Faça login.");
     err.status = 401;
