@@ -1,6 +1,5 @@
-import fs from "node:fs";
 import { isConferencia, requireAdminOuConferencia } from "../../google-sheets/lib/access-control.js";
-import { fotoArquivo } from "../../google-sheets/lib/bira-fotos.js";
+import { lerFoto } from "../../google-sheets/lib/bira-fotos.js";
 import { normalizePlaca } from "../../google-sheets/lib/excel-utils.js";
 import {
   getLocalizadosData,
@@ -30,12 +29,11 @@ export default async function handler(req, res) {
         return;
       }
     }
-    const file = fotoArquivo(placa);
-    if (!file) {
+    const body = await lerFoto(placa);
+    if (!body) {
       res.status(404).json({ error: "Sem foto desta placa." });
       return;
     }
-    const body = fs.readFileSync(file);
     res.setHeader("Content-Type", "image/jpeg");
     res.setHeader("Content-Length", body.length);
     res.setHeader("Cache-Control", "private, max-age=86400");

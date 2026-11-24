@@ -12,7 +12,7 @@ import {
 } from "./localizador-lotes.js";
 import { readGestorRecords } from "../sync-controle-diligencias.js";
 import { locatorStatus, publicText } from "./access-control.js";
-import { attachFotos } from "./bira-fotos.js";
+import { attachFotos, prepararFotos } from "./bira-fotos.js";
 import { readPipeline } from "./crm-sheets.js";
 import { parseLocgramLive } from "./parse-locgram-live.js";
 
@@ -283,6 +283,7 @@ export function scopeLocalizados(payload, locs) {
 }
 
 export async function getLocalizadosData({ force = false } = {}) {
+  await prepararFotos();
   if (!force && cache.payload && Date.now() - cache.loadedAt < cache.ttlMs) {
     return attachFotos(cache.payload, cache.apreendidas);
   }
@@ -315,6 +316,7 @@ export async function updatePosicao({ placa, posicao, obs, locs } = {}) {
   const obsText = obs === undefined ? undefined : normalizeText(obs);
 
   const permitidos = Array.isArray(locs) && locs.length ? new Set(locs) : null;
+  await prepararFotos();
 
   return editarPlanilha(gestorId(), async (workbook) => {
     if (permitidos) {

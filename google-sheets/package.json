@@ -14,6 +14,7 @@
     "normalize:loc": "node normalize-crm-localizadores.js",
     "normalize:crm": "node normalize-crm-fields.js",
     "localizados:status": "node push-localizados-status.js",
+    "fotos:drive": "node enviar-fotos-drive.mjs",
     "locgram:listen": "npm start --prefix ../whatsapp-locgram",
     "locgram:setup": "npm run setup --prefix ../whatsapp-locgram",
     "locgram:chats": "npm run chats --prefix ../whatsapp-locgram",

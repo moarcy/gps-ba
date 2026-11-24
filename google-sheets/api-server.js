@@ -10,7 +10,7 @@ import { loginWithPassword, listUsers } from "./lib/access-store.js";
 import { dispatchCrmAction, getCrmData, previewWhatsapp } from "./lib/crm-service.js";
 import { buildDashboardPayload } from "./lib/dashboard-data.js";
 import { handleIlocWebhook } from "./lib/iloc-webhook.js";
-import { fotoArquivo } from "./lib/bira-fotos.js";
+import { lerFoto } from "./lib/bira-fotos.js";
 import {
   getLocalizadosData,
   ingestLocgramHit,
@@ -181,12 +181,11 @@ const server = http.createServer(async (req, res) => {
           return;
         }
       }
-      const file = fotoArquivo(placa);
-      if (!file) {
+      const body = await lerFoto(placa);
+      if (!body) {
         sendJson(res, 404, { error: "Sem foto desta placa." });
         return;
       }
-      const body = fs.readFileSync(file);
       res.writeHead(200, {
         "Content-Type": "image/jpeg",
         "Content-Length": body.length,

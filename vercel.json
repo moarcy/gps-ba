@@ -35,6 +35,10 @@
       "memory": 1024,
       "maxDuration": 60
     },
+    "api/localizados/foto.js": {
+      "memory": 1024,
+      "maxDuration": 30
+    },
     "api/webhooks/iloc.js": {
       "memory": 1024,
       "maxDuration": 60

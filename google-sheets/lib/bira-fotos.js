@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { getDriveClient } from "../excel-drive-client.js";
 
 const PLACA = /^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$/;
 
@@ -13,6 +14,9 @@ const DEFAULT_FOTOS = "C:\\Users\\moarc\\AppData\\Local\\Temp\\bira-all";
 const DEFAULT_LIDAS = "C:\\Users\\moarc\\AppData\\Local\\Temp\\bira-chat\\lidas";
 
 let indexCache = null;
+let driveMap = null;
+let driveLoadedAt = 0;
+const DRIVE_TTL_MS = 10 * 60 * 1000;
 
 function fotosDir() {
   return process.env.BIRA_FOTOS_DIR || DEFAULT_FOTOS;
@@ -53,7 +57,73 @@ function score(row) {
   return points;
 }
 
+function pastaFotosId() {
+  return process.env.BIRA_FOTOS_FOLDER_ID?.trim() || "";
+}
+
+async function indiceNoDrive(folderId) {
+  const drive = await getDriveClient();
+  const listed = await drive.files.list({
+    q: `'${folderId}' in parents and name = 'index.json' and trashed = false`,
+    fields: "files(id)",
+    pageSize: 1,
+    supportsAllDrives: true,
+    includeItemsFromAllDrives: true,
+  });
+  const fileId = listed.data.files?.[0]?.id;
+  if (!fileId) return new Map();
+  const res = await drive.files.get(
+    { fileId, alt: "media", supportsAllDrives: true },
+    { responseType: "arraybuffer" },
+  );
+  const data = JSON.parse(Buffer.from(res.data).toString("utf8"));
+  const map = new Map();
+  for (const [placa, id] of Object.entries(data || {})) {
+    if (placa && id) map.set(String(placa), String(id));
+  }
+  return map;
+}
+
+export async function prepararFotos() {
+  const folderId = pastaFotosId();
+  if (!folderId) return;
+  if (driveMap && Date.now() - driveLoadedAt < DRIVE_TTL_MS) return;
+  try {
+    const baixado = await indiceNoDrive(folderId);
+    if (baixado.size) {
+      driveMap = baixado;
+      driveLoadedAt = Date.now();
+    }
+  } catch (error) {
+    console.error("fotos drive", error.message);
+  }
+}
+
+async function baixarDoDrive(fileId) {
+  const drive = await getDriveClient();
+  const res = await drive.files.get(
+    { fileId, alt: "media", supportsAllDrives: true },
+    { responseType: "arraybuffer" },
+  );
+  return Buffer.from(res.data);
+}
+
+export async function lerFoto(placa) {
+  await prepararFotos();
+  const fileId = driveMap?.get(normPlaca(placa));
+  if (fileId) return baixarDoDrive(fileId);
+  const file = fotoArquivo(placa);
+  return file ? fs.readFileSync(file) : null;
+}
+
 export function loadFotoIndex() {
+  if (driveMap?.size) {
+    const map = new Map();
+    for (const [placa, fileId] of driveMap) {
+      map.set(placa, { arquivo: fileId, score: 1, drive: true });
+    }
+    return map;
+  }
   if (indexCache) return indexCache;
   const map = new Map();
   const lidas = lidasDir();
