@@ -126,6 +126,19 @@ export function requireAdmin(req) {
   return actor;
 }
 
+/** Bira só confere a posição dos carros. Não abre CRM, pagamento nem as outras praças. */
+export function isConferencia(actor) {
+  return actor?.papel === "localizador" && String(actor.localizador || "").trim().toUpperCase() === "BIRA";
+}
+
+export function requireAdminOuConferencia(req) {
+  const actor = actorFromRequest(req);
+  if (actor.papel === "admin" || isConferencia(actor)) return actor;
+  const err = new Error("Sem permissão.");
+  err.status = 403;
+  throw err;
+}
+
 export function publicText(value) {
   let text = String(value ?? "").trim();
   if (!text || text === "[object Object]") return "";

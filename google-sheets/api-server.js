@@ -5,13 +5,19 @@ import http from "node:http";
 import { URL } from "node:url";
 import { downloadExcel } from "./excel-drive-client.js";
 import { addVehicleToGestor } from "./lib/add-vehicle.js";
-import { actorFromRequest, requireAdmin } from "./lib/access-control.js";
+import { actorFromRequest, isConferencia, requireAdmin, requireAdminOuConferencia } from "./lib/access-control.js";
 import { loginWithPassword, listUsers } from "./lib/access-store.js";
 import { dispatchCrmAction, getCrmData, previewWhatsapp } from "./lib/crm-service.js";
 import { buildDashboardPayload } from "./lib/dashboard-data.js";
 import { handleIlocWebhook } from "./lib/iloc-webhook.js";
 import { fotoArquivo } from "./lib/bira-fotos.js";
-import { getLocalizadosData, ingestLocgramHit, updatePosicao } from "./lib/localizados-service.js";
+import {
+  getLocalizadosData,
+  ingestLocgramHit,
+  locsDaConferencia,
+  scopeLocalizados,
+  updatePosicao,
+} from "./lib/localizados-service.js";
 import { baixarPdfEmitida, emitNfse, emitNfseLote, getNfseData, pdfEmitida, upsertTomador } from "./lib/nfse-service.js";
 import { getRadarData } from "./lib/radar-service.js";
 import {
@@ -136,6 +142,10 @@ const server = http.createServer(async (req, res) => {
 
     if (url.pathname === "/api/crm" && req.method === "GET") {
       const actor = actorFromRequest(req);
+      if (isConferencia(actor)) {
+        sendJson(res, 403, { error: "Sem permissão." });
+        return;
+      }
       if (url.searchParams.get("preview") === "1") {
         if (actor.papel !== "admin") {
           sendJson(res, 403, { error: "Sem permissão." });
@@ -150,6 +160,10 @@ const server = http.createServer(async (req, res) => {
 
     if (url.pathname === "/api/crm" && (req.method === "POST" || req.method === "PATCH")) {
       const actor = actorFromRequest(req);
+      if (isConferencia(actor)) {
+        sendJson(res, 403, { error: "Sem permissão." });
+        return;
+      }
       const body = await readJsonBody(req);
       const { status, data } = await dispatchCrmAction(body, actor);
       sendJson(res, status, data);
@@ -157,8 +171,17 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (url.pathname === "/api/localizados/foto" && req.method === "GET") {
-      requireAdmin(req);
-      const file = fotoArquivo(url.searchParams.get("placa"));
+      const actor = requireAdminOuConferencia(req);
+      const placa = url.searchParams.get("placa");
+      if (isConferencia(actor)) {
+        const lista = scopeLocalizados(await getLocalizadosData(), locsDaConferencia(actor.localizador));
+        const placaOk = lista.dias.some((dia) => dia.items.some((it) => it.placa === String(placa || "").toUpperCase().replace(/[^A-Z0-9]/g, "")));
+        if (!placaOk) {
+          sendJson(res, 404, { error: "Sem foto desta placa." });
+          return;
+        }
+      }
+      const file = fotoArquivo(placa);
       if (!file) {
         sendJson(res, 404, { error: "Sem foto desta placa." });
         return;
@@ -174,21 +197,33 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (url.pathname === "/api/localizados" && req.method === "GET") {
-      requireAdmin(req);
+      const actor = requireAdminOuConferencia(req);
       const force = url.searchParams.get("refresh") === "1";
-      sendJson(res, 200, await getLocalizadosData({ force }));
+      const data = await getLocalizadosData({ force });
+      sendJson(res, 200, isConferencia(actor) ? scopeLocalizados(data, locsDaConferencia(actor.localizador)) : data);
       return;
     }
 
     if (url.pathname === "/api/localizados" && (req.method === "POST" || req.method === "PATCH")) {
-      requireAdmin(req);
+      const actor = requireAdminOuConferencia(req);
       const body = await readJsonBody(req);
       const action = body.action || body.op;
       if (action === "ingest" || action === "locgram") {
+        if (isConferencia(actor)) {
+          sendJson(res, 403, { error: "Sem permissão." });
+          return;
+        }
         sendJson(res, 200, await ingestLocgramHit(body));
         return;
       }
-      sendJson(res, 200, await updatePosicao(body));
+      sendJson(
+        res,
+        200,
+        await updatePosicao({
+          ...body,
+          ...(isConferencia(actor) ? { locs: locsDaConferencia(actor.localizador) } : {}),
+        }),
+      );
       return;
     }
 

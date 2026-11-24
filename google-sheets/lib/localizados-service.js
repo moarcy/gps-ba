@@ -11,7 +11,7 @@ import {
   upsertLocalizadosOpsRow,
 } from "./localizador-lotes.js";
 import { readGestorRecords } from "../sync-controle-diligencias.js";
-import { locatorStatus } from "./access-control.js";
+import { locatorStatus, publicText } from "./access-control.js";
 import { attachFotos } from "./bira-fotos.js";
 import { readPipeline } from "./crm-sheets.js";
 import { parseLocgramLive } from "./parse-locgram-live.js";
@@ -251,6 +251,37 @@ async function loadWorkbook({ useCache = false } = {}) {
   return { workbook, localPath };
 }
 
+export function locsDaConferencia(localizador) {
+  const loc = String(localizador || "").trim().toUpperCase();
+  if (loc === "BIRA") return ["BIRA", "CARLOS"];
+  return loc ? [loc] : [];
+}
+
+export function scopeLocalizados(payload, locs) {
+  const allow = new Set(locs);
+  const dias = (payload?.dias || [])
+    .filter((dia) => allow.has(dia.loc))
+    .map((dia) => ({
+      ...dia,
+      whatsapp: "",
+      items: (dia.items || []).map((it) => ({
+        ...it,
+        veiculo: publicText(it.veiculo),
+        local: publicText(it.local),
+        obs: publicText(it.obs),
+      })),
+    }));
+  const locators = (payload?.locators || []).filter((loc) => allow.has(loc.id));
+  const items = dias.flatMap((dia) => dia.items);
+  return {
+    ...payload,
+    dias,
+    lotes: dias,
+    locators,
+    counts: countPos(items),
+  };
+}
+
 export async function getLocalizadosData({ force = false } = {}) {
   if (!force && cache.payload && Date.now() - cache.loadedAt < cache.ttlMs) {
     return attachFotos(cache.payload, cache.apreendidas);
@@ -272,7 +303,7 @@ export async function getLocalizadosData({ force = false } = {}) {
   return attachFotos(payload, cache.apreendidas);
 }
 
-export async function updatePosicao({ placa, posicao, obs } = {}) {
+export async function updatePosicao({ placa, posicao, obs, locs } = {}) {
   const plate = normalizePlaca(placa);
   if (!plate) {
     throw Object.assign(new Error("Informe a placa."), { status: 400 });
@@ -283,7 +314,16 @@ export async function updatePosicao({ placa, posicao, obs } = {}) {
   }
   const obsText = obs === undefined ? undefined : normalizeText(obs);
 
+  const permitidos = Array.isArray(locs) && locs.length ? new Set(locs) : null;
+
   return editarPlanilha(gestorId(), async (workbook) => {
+    if (permitidos) {
+      const atual = readLocalizadosOps(workbook.getWorksheet(LOCALIZADOS_OPS_SHEET));
+      const row = atual.find((it) => it.placa === plate);
+      if (!row || !permitidos.has(row.loc)) {
+        throw Object.assign(new Error("Essa placa não está na sua lista."), { status: 403 });
+      }
+    }
     const sheets = [LOCALIZADOS_OPS_SHEET, LOTES_SHEET, STATUS_SHEET];
     let found = false;
     for (const name of sheets) {
@@ -300,8 +340,9 @@ export async function updatePosicao({ placa, posicao, obs } = {}) {
     cache.apreendidas = platesApreendidas(workbook);
     cache.loadedAt = Date.now();
     const shown = attachFotos(payload, cache.apreendidas);
-    const item = shown.dias.flatMap((d) => d.items).find((it) => it.placa === plate);
-    return { ok: true, placa: plate, posicao: next, obs: item?.obs || obsText || "", item, data: shown };
+    const data = permitidos ? scopeLocalizados(shown, [...permitidos]) : shown;
+    const item = data.dias.flatMap((d) => d.items).find((it) => it.placa === plate);
+    return { ok: true, placa: plate, posicao: next, obs: item?.obs || obsText || "", item, data };
   });
 }
 

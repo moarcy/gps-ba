@@ -1,5 +1,11 @@
-import { requireAdmin } from "../google-sheets/lib/access-control.js";
-import { getLocalizadosData, ingestLocgramHit, updatePosicao } from "../google-sheets/lib/localizados-service.js";
+import { isConferencia, requireAdminOuConferencia } from "../google-sheets/lib/access-control.js";
+import {
+  getLocalizadosData,
+  ingestLocgramHit,
+  locsDaConferencia,
+  scopeLocalizados,
+  updatePosicao,
+} from "../google-sheets/lib/localizados-service.js";
 
 function readJsonBody(req) {
   if (req.body && typeof req.body === "object") return req.body;
@@ -20,12 +26,13 @@ export default async function handler(req, res) {
   }
 
   try {
-    requireAdmin(req);
+    const actor = requireAdminOuConferencia(req);
+    const conferencia = isConferencia(actor);
     if (req.method === "GET") {
       const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
       const force = url.searchParams.get("refresh") === "1";
       const data = await getLocalizadosData({ force });
-      res.status(200).json(data);
+      res.status(200).json(conferencia ? scopeLocalizados(data, locsDaConferencia(actor.localizador)) : data);
       return;
     }
 
@@ -33,6 +40,10 @@ export default async function handler(req, res) {
       const body = readJsonBody(req);
       const action = body.action || body.op;
       if (action === "ingest" || action === "locgram") {
+        if (conferencia) {
+          res.status(403).json({ error: "Sem permissão." });
+          return;
+        }
         if (process.env.VERCEL) {
           res.status(403).json({
             error: "Coleta Locgram roda no notebook (Evolution), não na Vercel.",
@@ -43,7 +54,10 @@ export default async function handler(req, res) {
         res.status(200).json(result);
         return;
       }
-      const result = await updatePosicao(body);
+      const result = await updatePosicao({
+        ...body,
+        ...(conferencia ? { locs: locsDaConferencia(actor.localizador) } : {}),
+      });
       res.status(200).json(result);
       return;
     }

@@ -1,4 +1,4 @@
-import { actorFromRequest } from "../google-sheets/lib/access-control.js";
+import { actorFromRequest, isConferencia } from "../google-sheets/lib/access-control.js";
 import { dispatchCrmAction, getCrmData, previewWhatsapp } from "../google-sheets/lib/crm-service.js";
 
 function readJsonBody(req) {
@@ -21,6 +21,10 @@ export default async function handler(req, res) {
 
   try {
     const actor = actorFromRequest(req);
+    if (isConferencia(actor)) {
+      res.status(403).json({ error: "Sem permissão." });
+      return;
+    }
 
     if (req.method === "GET") {
       const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);

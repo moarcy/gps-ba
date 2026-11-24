@@ -134,6 +134,7 @@ export default function MobileApp({
   radar,
   crmByPlaca,
   locator = false,
+  conferir = false,
   onLogout,
 }) {
   const [vehicle, setVehicle] = useState(null);
@@ -217,6 +218,7 @@ export default function MobileApp({
     body = (
       <LocalizadosPanel
         phone
+        conferir={conferir}
         data={localizados.data}
         loading={localizados.loading}
         error={localizados.error}
@@ -431,7 +433,7 @@ export default function MobileApp({
     <div className="phone">
       <header className="phone-header">
         <div className="phone-top">
-          {NESTED[tab] ? (
+          {!conferir && NESTED[tab] ? (
             <button type="button" className="phone-back" onClick={() => setTab("mais")}>
               ‹ Mais
             </button>
@@ -466,7 +468,7 @@ export default function MobileApp({
             </button>
           </div>
         </div>
-        <h1 className="phone-title">{locator && tab === "crm" ? "Filas" : TITLES[tab] || "GPS BA"}</h1>
+        <h1 className="phone-title">{conferir ? "Conferir veículos" : locator && tab === "crm" ? "Filas" : TITLES[tab] || "GPS BA"}</h1>
         {SEARCH_TABS.has(tab) && (
           <div className="phone-search">
             <input
@@ -492,7 +494,7 @@ export default function MobileApp({
 
       <main className="phone-main">{body}</main>
 
-      <nav
+      {!conferir && <nav
         className="phone-nav"
         style={locator ? { gridTemplateColumns: "repeat(2, minmax(0, 1fr))" } : undefined}
         aria-label="Navegação principal"
@@ -517,7 +519,7 @@ export default function MobileApp({
             </button>
           );
         })}
-      </nav>
+      </nav>}
 
       {filtersOpen && (
         <div className="sheet-root mobile-sheet" role="dialog" aria-modal="true" aria-label="Filtros">

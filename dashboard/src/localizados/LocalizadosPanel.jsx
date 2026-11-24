@@ -171,6 +171,7 @@ export default function LocalizadosPanel({
   onMark,
   searchQuery = "",
   phone = false,
+  conferir = false,
 }) {
   const rawLocators = data?.locators || [];
   const rawDias = data?.dias || data?.lotes || [];
@@ -180,7 +181,7 @@ export default function LocalizadosPanel({
   const [loc, setLoc] = useState("");
   const [diaId, setDiaId] = useState("");
   const [copied, setCopied] = useState(false);
-  const [soFoto, setSoFoto] = useState(true);
+  const [soFoto, setSoFoto] = useState(!conferir);
 
   const needle = searchQuery.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
 
@@ -200,7 +201,8 @@ export default function LocalizadosPanel({
     () => locDias.filter((d) => d.items.some((it) => it.temFoto)),
     [locDias],
   );
-  const navDias = soFoto && fotoDias.length && !needle ? fotoDias : locDias;
+  const fotosOnly = conferir ? false : soFoto;
+  const navDias = fotosOnly && fotoDias.length && !needle ? fotoDias : locDias;
 
   const hit = useMemo(() => {
     if (!needle) return null;
@@ -215,12 +217,12 @@ export default function LocalizadosPanel({
     }
     const currentLoc = locators.find((l) => l.id === loc);
     if (!currentLoc) return;
-    const pool = soFoto && fotoDias.length ? fotoDias : locDias;
+    const pool = fotosOnly && fotoDias.length ? fotoDias : locDias;
     const stillThere = pool.some((d) => d.id === diaId);
     if (!stillThere) {
       setDiaId(pool[0]?.id || currentLoc.primeiroPendente || "");
     }
-  }, [hit, loc, locators, locDias, fotoDias, diaId, soFoto]);
+  }, [hit, loc, locators, locDias, fotoDias, diaId, fotosOnly]);
 
   const dia = navDias.find((d) => d.id === diaId) || navDias[0];
   const diaIndex = Math.max(0, navDias.findIndex((d) => d.id === dia?.id));
@@ -270,17 +272,18 @@ export default function LocalizadosPanel({
       {!phone && (
         <div className="loc-head">
           <p className="loc-kicker">Checklist de posição</p>
-          <h2>Confirma com o localizador</h2>
+          <h2>{conferir ? "Conferir veículos" : "Confirma com o localizador"}</h2>
           <p className="loc-sub">
-            Um dia de cada vez, Bira e Carlos juntos. O carro do Carlos leva a tag Carlos.
-            A miniatura é a foto do Zap do Bira. Sim e Não gravam a posição.
+            {conferir
+              ? "Um dia de cada vez. Sim se você ainda tem a posição, Não se não tem. O carro do Carlos leva a tag Carlos."
+              : "Um dia de cada vez, Bira e Carlos juntos. O carro do Carlos leva a tag Carlos. A miniatura é a foto do Zap do Bira. Sim e Não gravam a posição."}
           </p>
         </div>
       )}
 
       {error ? <div className="loc-banner">{error}</div> : null}
 
-      <div className="loc-people" role="tablist" aria-label="Localizador">
+      {!conferir && <div className="loc-people" role="tablist" aria-label="Localizador">
         {locators.map((item) => (
           <button
             key={item.id}
@@ -298,7 +301,7 @@ export default function LocalizadosPanel({
             </span>
           </button>
         ))}
-      </div>
+      </div>}
 
       {!dia ? (
         <div className="loc-empty">Nenhum dia para {locator?.nome || loc}.</div>
@@ -337,7 +340,7 @@ export default function LocalizadosPanel({
 
           {!phone && dia.dica ? <p className="loc-dica">{dia.dica}</p> : null}
 
-          {!phone ? (
+          {!phone && !conferir ? (
             <button
               type="button"
               className={`loc-copy${copied ? " is-ok" : ""}`}
@@ -349,7 +352,7 @@ export default function LocalizadosPanel({
             </button>
           ) : null}
 
-          {!phone && dia.items.some((car) => car.temFoto) ? (
+          {!phone && !conferir && dia.items.some((car) => car.temFoto) ? (
             <button
               type="button"
               className={`loc-copy${soFoto ? " is-ok" : ""}`}
@@ -360,7 +363,7 @@ export default function LocalizadosPanel({
                 : `Ver só as ${dia.items.filter((car) => car.temFoto).length} fotos deste dia`}
             </button>
           ) : null}
-          {!phone && !dia.items.some((car) => car.temFoto) ? (
+          {!phone && !conferir && !dia.items.some((car) => car.temFoto) ? (
             <p className="loc-dica">Este dia ainda não tem foto do Zap do Bira.</p>
           ) : null}
 
@@ -370,7 +373,7 @@ export default function LocalizadosPanel({
             </button>
             <span>
               {diaIndex + 1} / {navDias.length}
-              {soFoto && fotoDias.length ? " com foto" : ""}
+              {fotosOnly && fotoDias.length ? " com foto" : ""}
             </span>
             <button
               type="button"
@@ -388,7 +391,7 @@ export default function LocalizadosPanel({
           ) : null}
 
           <div className="loc-cars">
-            {(soFoto && dia.items.some((car) => car.temFoto)
+            {(fotosOnly && dia.items.some((car) => car.temFoto)
               ? dia.items.filter((car) => car.temFoto)
               : dia.items
             ).map((car) => (

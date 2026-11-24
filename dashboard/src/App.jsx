@@ -254,14 +254,15 @@ function IconFeira() {
 }
 
 export default function App({ user, onLogout }) {
-  const locator = user?.papel === "localizador";
+  const conferir = user?.papel === "localizador" && user?.localizador === "BIRA";
+  const locator = user?.papel === "localizador" && !conferir;
   const isMobile = useIsMobile();
-  const { data, loading, error, reload } = useDashboard({ enabled: !locator });
-  const [tab, setTab] = useState(locator ? "crm" : "resumo");
-  const crm = useCrm({ enabled: locator || tab === "crm" || tab === "calendario" || tab === "feira" });
-  const nfse = useNfse({ enabled: !locator && tab === "nfse" });
-  const localizados = useLocalizados({ enabled: !locator && tab === "local" });
-  const radar = useRadar({ enabled: !locator && tab === "feira" });
+  const { data, loading, error, reload } = useDashboard({ enabled: !locator && !conferir });
+  const [tab, setTab] = useState(conferir ? "local" : locator ? "crm" : "resumo");
+  const crm = useCrm({ enabled: !conferir && (locator || tab === "crm" || tab === "calendario" || tab === "feira") });
+  const nfse = useNfse({ enabled: !locator && !conferir && tab === "nfse" });
+  const localizados = useLocalizados({ enabled: conferir || (!locator && tab === "local") });
+  const radar = useRadar({ enabled: !locator && !conferir && tab === "feira" });
   const [month, setMonth] = useState("all");
   const [assessoria, setAssessoria] = useState("all");
   const [loc1, setLoc1] = useState("all");
@@ -279,8 +280,9 @@ export default function App({ user, onLogout }) {
   }, [filtersOpen, addOpen]);
 
   useEffect(() => {
-    if (locator && tab !== "crm" && tab !== "calendario") setTab("crm");
-  }, [locator, tab]);
+    if (conferir && tab !== "local") setTab("local");
+    else if (locator && tab !== "crm" && tab !== "calendario") setTab("crm");
+  }, [conferir, locator, tab]);
 
   const crmByPlaca = useMemo(() => {
     const map = {};
@@ -427,6 +429,7 @@ export default function App({ user, onLogout }) {
         radar={radar}
         crmByPlaca={crmByPlaca}
         locator={locator}
+        conferir={conferir}
         onLogout={onLogout}
       />
     );
@@ -570,7 +573,7 @@ export default function App({ user, onLogout }) {
             <div className="brand-mark">
               GPS <span>BA</span>
             </div>
-            <p className="brand-sub hide-mobile">{locator ? user.localizador : "Controle de Diligências"}</p>
+            <p className="brand-sub hide-mobile">{conferir || locator ? user.localizador : "Controle de Diligências"}</p>
           </div>
           <div className="header-actions">
             {!locator && tab !== "local" && tab !== "feira" && tab !== "ruas" && (
@@ -625,7 +628,9 @@ export default function App({ user, onLogout }) {
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder={
-              tab === "crm" || (locator && tab === "calendario")
+              conferir
+                ? "Buscar placa…"
+                : tab === "crm" || (locator && tab === "calendario")
                 ? locator
                   ? "Buscar placa ou veículo…"
                   : "Buscar no CRM: placa, loc, assessoria, status…"
@@ -645,7 +650,9 @@ export default function App({ user, onLogout }) {
         </div>
 
         <nav className="desktop-nav desktop-only" aria-label="Navegação principal">
-          {(locator
+          {(conferir
+            ? [["local", "Veículos"]]
+            : locator
             ? [
                 ["crm", "Filas"],
                 ["calendario", "Calendário"],
@@ -674,11 +681,11 @@ export default function App({ user, onLogout }) {
       </header>
 
       <main className={`tab-panels tab-${tab}`}>
-        {!locator && (
+        {!locator && !conferir && (
         <section className={`filters desktop-filters desktop-only${tab === "nfse" || tab === "local" || tab === "feira" || tab === "ruas" ? " is-hidden" : ""}`}>{filtersForm}</section>
         )}
 
-        {!locator && <>
+        {!locator && !conferir && <>
         {/* RESUMO */}
         <section className={`tab-panel ${tab === "resumo" ? "is-active" : ""}`}>
           <div className="hero-saldo">
@@ -914,19 +921,6 @@ export default function App({ user, onLogout }) {
           </div>
         </section>
 
-        {/* Localizados / posição */}
-        <section className={`tab-panel ${tab === "local" ? "is-active" : ""}`}>
-          <LocalizadosPanel
-            data={localizados.data}
-            loading={localizados.loading}
-            error={localizados.error}
-            saving={localizados.saving}
-            onReload={localizados.reload}
-            onMark={localizados.mark}
-            searchQuery={q}
-          />
-        </section>
-
         <section className={`tab-panel ${tab === "ruas" ? "is-active" : ""}`}>
           <JacobinaPanel searchQuery={q} active={tab === "ruas"} />
         </section>
@@ -945,7 +939,23 @@ export default function App({ user, onLogout }) {
         </section>
         </>}
 
+        {!locator && (
+        <section className={`tab-panel ${tab === "local" ? "is-active" : ""}`}>
+          <LocalizadosPanel
+            conferir={conferir}
+            data={localizados.data}
+            loading={localizados.loading}
+            error={localizados.error}
+            saving={localizados.saving}
+            onReload={localizados.reload}
+            onMark={localizados.mark}
+            searchQuery={q}
+          />
+        </section>
+        )}
+
         {/* CRM */}
+        {!conferir && (
         <section className={`tab-panel ${tab === "crm" || (locator && tab === "calendario") ? "is-active" : ""}`}>
           <CrmPanel
             view={locator && tab === "calendario" ? "calendario" : undefined}
@@ -961,8 +971,9 @@ export default function App({ user, onLogout }) {
             locator={locator}
           />
         </section>
+        )}
 
-        {!locator && (
+        {!locator && !conferir && (
         /* NFS-e */
         <section className={`tab-panel ${tab === "nfse" ? "is-active" : ""}`}>
           <NfsePanel
@@ -979,7 +990,7 @@ export default function App({ user, onLogout }) {
       </main>
 
       {/* Mobile bottom nav */}
-      {!locator && (
+      {!locator && !conferir && (
       <nav className="bottom-nav" aria-label="Navegação principal">
         <button
           type="button"
@@ -1073,7 +1084,7 @@ export default function App({ user, onLogout }) {
         </div>
       )}
 
-      {!locator && (
+      {!locator && !conferir && (
       <AddVehicleSheet
         open={addOpen}
         onClose={() => setAddOpen(false)}

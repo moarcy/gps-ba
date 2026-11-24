@@ -4,6 +4,7 @@ import {
   locatorTimeline,
   publicLocalizadorCar,
   scrubLocatorMessage,
+  isConferencia,
   readSession,
   scopeCrmForLocalizador,
   senhaMatches,
@@ -159,6 +160,12 @@ test("carro público não copia campo interno", () => {
   assert.equal(car.status, "apreendido");
   assert.equal(Object.hasOwn(car, "assessoria"), false);
   assert.equal(Object.hasOwn(car, "telefone"), false);
+});
+
+test("o login do Bira é só conferência, o do Maciel continua localizador", () => {
+  assert.equal(isConferencia({ papel: "localizador", localizador: "BIRA" }), true);
+  assert.equal(isConferencia({ papel: "localizador", localizador: "MACIEL" }), false);
+  assert.equal(isConferencia({ papel: "admin", localizador: "BIRA" }), false);
 });
 
 test("sessão assinada não aceita troca de papel", () => {
