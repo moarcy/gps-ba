@@ -41,6 +41,7 @@ function isoDia(value) {
 
 function statusNota(emitida) {
   if (emitida.status === "authorized") return "autorizada";
+  if (emitida.status === "cancelada") return "cancelada";
   if (emitida.status === "substituida") {
     return emitida.substituidaPor ? `substituída pela ${emitida.substituidaPor}` : "substituída";
   }
@@ -54,11 +55,16 @@ function podeSubstituir(emitida) {
   return emitida.status === "authorized" && String(emitida.chaveAcesso || "").replace(/\D/g, "").length === 50;
 }
 
+function podeCancelar(emitida) {
+  return podeSubstituir(emitida);
+}
+
 function podeVerPdf(emitida) {
   return Boolean(emitida.pdf || emitida.chaveAcesso);
 }
 
 const EMPTY_TOMADOR = {
+  id: "",
   tipo: "CNPJ",
   documento: "",
   razaoSocial: "",
@@ -120,6 +126,7 @@ export default function NfsePanel({
   const [motivoTexto, setMotivoTexto] = useState("Correção dos dados da nota.");
   const [pdfAberto, setPdfAberto] = useState(null);
   const [abrindoPdf, setAbrindoPdf] = useState("");
+  const [cancelandoId, setCancelandoId] = useState("");
 
   useEffect(() => {
     const token = loadSession()?.token;
@@ -319,6 +326,30 @@ export default function NfsePanel({
     setLocalMsg(`Editando a NFS-e ${emitida.numeroNf || ""}. A emissão nova substitui a original.`);
   };
 
+  const cancelarNota = async (emitida) => {
+    if (!podeCancelar(emitida)) {
+      setLocalErr("Só uma nota autorizada pode ser cancelada.");
+      return;
+    }
+    const texto = window.prompt(
+      `Cancelar a NFS-e ${emitida.numeroNf || ""}? Ela deixa de valer. Motivo:`,
+      "Erro na emissão da nota.",
+    );
+    if (texto == null) return;
+    setLocalErr("");
+    setLocalMsg("");
+    setCancelandoId(emitida.id);
+    try {
+      await runAction({ action: "cancelar", id: emitida.id, motivo: texto, cMotivo: "1" });
+      if (pdfAberto?.id === emitida.id) setPdfAberto(null);
+      setLocalMsg(`NFS-e ${emitida.numeroNf || ""} cancelada.`);
+    } catch (err) {
+      setLocalErr(err.message || "Não cancelei a nota.");
+    } finally {
+      setCancelandoId("");
+    }
+  };
+
   const cancelarEdicao = () => {
     setSubstituir(null);
     setLocalErr("");
@@ -336,21 +367,61 @@ export default function NfsePanel({
     }
   };
 
+  const abrirCadastro = (tomador) => {
+    setTela("assessorias");
+    setShowTomadorForm(true);
+    setTomadorForm(
+      tomador
+        ? {
+            id: tomador.id || "",
+            tipo: tomador.tipo || "CNPJ",
+            documento: tomador.documento || "",
+            razaoSocial: tomador.razaoSocial || "",
+            logradouro: tomador.logradouro || "",
+            numero: tomador.numero || "",
+            complemento: tomador.complemento || "",
+            bairro: tomador.bairro || "",
+            municipio: tomador.municipio || "",
+            uf: tomador.uf || "",
+            cep: tomador.cep || "",
+            telefone: tomador.telefone || "",
+            email: tomador.email || "",
+          }
+        : EMPTY_TOMADOR,
+    );
+    setLocalErr("");
+    setLocalMsg("");
+  };
+
   const saveTomador = async (event) => {
     event.preventDefault();
     setLocalErr("");
     setLocalMsg("");
+    if (!tomadorForm.id.trim()) {
+      setLocalErr("Informe o nome curto da assessoria. É ele que aparece na lista e no arquivo da nota.");
+      return;
+    }
+    if (!String(tomadorForm.documento || "").replace(/\D/g, "")) {
+      setLocalErr("Informe o CPF ou CNPJ.");
+      return;
+    }
+    if (!tomadorForm.razaoSocial.trim()) {
+      setLocalErr("Informe a razão social.");
+      return;
+    }
     try {
       const result = await runAction({
         action: "upsert_tomador",
         ...tomadorForm,
+        id: tomadorForm.id.trim().toUpperCase(),
       });
-      setTomadorId(result.tomador?.id || result.tomador?.documento || "");
+      const salvo = result.tomador?.id || result.tomador?.documento || "";
+      setTomadorId(salvo);
       setShowTomadorForm(false);
       setTomadorForm(EMPTY_TOMADOR);
-      setLocalMsg("Tomador salvo.");
+      setLocalMsg(`${salvo} salva. Já pode emitir a nota para ela.`);
     } catch (err) {
-      setLocalErr(err.message || "Falha ao salvar tomador");
+      setLocalErr(err.message || "Falha ao salvar assessoria");
     }
   };
 
@@ -500,14 +571,23 @@ export default function NfsePanel({
     <div className="nfse-panel">
       <div className="nfse-head">
         <div>
-          <h2>{tela === "notas" ? "Notas emitidas" : substituir ? "Substituir NFS-e" : "Emissão NFS-e"}</h2>
-          <p className="nfse-sub">
+          <h2>
             {tela === "notas"
-              ? "Veja na tela, baixe ou substitua a nota"
-              : substituir
-                ? `No lugar da NFS-e ${substituir.numeroNf || ""}`
-                : "Sefin Nacional · dados bancários entram sozinhos"}
-            {data?.workerConfigured ? "" : " · worker não configurado"}
+              ? "Notas emitidas"
+              : tela === "assessorias"
+                ? "Assessorias"
+                : substituir
+                  ? "Substituir NFS-e"
+                  : "Emissão NFS-e"}
+          </h2>
+          <p className="nfse-sub">
+            {tela === "assessorias"
+              ? "Cadastre quem recebe a nota. O nome curto entra na lista e no arquivo."
+              : tela === "notas"
+                ? "Veja na tela, baixe ou substitua a nota"
+                : substituir
+                  ? `No lugar da NFS-e ${substituir.numeroNf || ""}`
+                  : "Sefin Nacional · dados bancários entram sozinhos"}
           </p>
         </div>
         <button type="button" className="btn btn-ghost" onClick={() => onReload()} disabled={loading}>
@@ -530,6 +610,13 @@ export default function NfsePanel({
         >
           Emitir
         </button>
+        <button
+          type="button"
+          className={`nfse-chip${tela === "assessorias" ? " is-on" : ""}`}
+          onClick={() => setTela("assessorias")}
+        >
+          Assessorias
+        </button>
       </div>
 
       {(error || localErr) && <div className="nfse-banner nfse-banner-error">{localErr || error}</div>}
@@ -548,9 +635,9 @@ export default function NfsePanel({
         </div>
       )}
 
-      {!data?.workerConfigured && (
+      {tela === "emitir" && !data?.workerConfigured && (
         <div className="nfse-banner">
-          Defina <code>NFSE_WORKER_URL</code> e suba o worker Playwright para emitir.
+          Cadastrar assessoria já funciona. Para emitir, o programa da nota precisa estar ligado neste computador: o certificado fica aqui e a emissão não sobe para a nuvem.
         </div>
       )}
 
@@ -651,6 +738,16 @@ export default function NfsePanel({
                       Editar
                     </button>
                   )}
+                  {podeCancelar(e) && (
+                    <button
+                      type="button"
+                      className="btn btn-ghost"
+                      onClick={() => cancelarNota(e)}
+                      disabled={cancelandoId === e.id}
+                    >
+                      {cancelandoId === e.id ? "Cancelando…" : "Cancelar"}
+                    </button>
+                  )}
                   <button type="button" className="btn btn-ghost" onClick={() => copyNome(nome.replace(/\.pdf$/i, ""))}>
                     Copiar nome
                   </button>
@@ -658,6 +755,171 @@ export default function NfsePanel({
               </article>
             );
           })}
+        </section>
+      )}
+
+      {tela === "assessorias" && (
+        <section className="nfse-notas">
+          <div className="nfse-notas-bar">
+            <p>{tomadoresVisiveis.length} assessoria(s)</p>
+            <button type="button" className="btn btn-primary" onClick={() => abrirCadastro(null)}>
+              Nova assessoria
+            </button>
+          </div>
+          <p className="nfse-hint">
+            Use quando a nota for para alguém que ainda não está na lista. O mesmo CPF/CNPJ atualiza o cadastro existente.
+          </p>
+          {showTomadorForm && (
+            <form className="nfse-card" onSubmit={saveTomador}>
+              <h3>{tomadorForm.id ? "Assessoria" : "Nova assessoria"}</h3>
+              <div className="nfse-grid">
+                <label className="nfse-span-2">
+                  <span>Nome curto</span>
+                  <input
+                    value={tomadorForm.id}
+                    onChange={(e) => setTomadorForm((p) => ({ ...p, id: e.target.value.toUpperCase() }))}
+                    placeholder="BELLINATI PEREZ"
+                    required
+                  />
+                </label>
+                <label>
+                  <span>Tipo</span>
+                  <select
+                    value={tomadorForm.tipo}
+                    onChange={(e) => setTomadorForm((p) => ({ ...p, tipo: e.target.value }))}
+                  >
+                    <option value="CNPJ">CNPJ</option>
+                    <option value="CPF">CPF</option>
+                  </select>
+                </label>
+                <label>
+                  <span>CPF / CNPJ</span>
+                  <input
+                    value={tomadorForm.documento}
+                    onChange={(e) => setTomadorForm((p) => ({ ...p, documento: e.target.value }))}
+                    required
+                  />
+                </label>
+                <label className="nfse-span-2">
+                  <span>Razão social</span>
+                  <input
+                    value={tomadorForm.razaoSocial}
+                    onChange={(e) => setTomadorForm((p) => ({ ...p, razaoSocial: e.target.value }))}
+                    required
+                  />
+                </label>
+                <label className="nfse-span-2">
+                  <span>Logradouro</span>
+                  <input
+                    value={tomadorForm.logradouro}
+                    onChange={(e) => setTomadorForm((p) => ({ ...p, logradouro: e.target.value }))}
+                  />
+                </label>
+                <label>
+                  <span>Número</span>
+                  <input
+                    value={tomadorForm.numero}
+                    onChange={(e) => setTomadorForm((p) => ({ ...p, numero: e.target.value }))}
+                  />
+                </label>
+                <label>
+                  <span>Complemento</span>
+                  <input
+                    value={tomadorForm.complemento}
+                    onChange={(e) => setTomadorForm((p) => ({ ...p, complemento: e.target.value }))}
+                  />
+                </label>
+                <label>
+                  <span>Bairro</span>
+                  <input
+                    value={tomadorForm.bairro}
+                    onChange={(e) => setTomadorForm((p) => ({ ...p, bairro: e.target.value }))}
+                  />
+                </label>
+                <label>
+                  <span>Município</span>
+                  <input
+                    value={tomadorForm.municipio}
+                    onChange={(e) => setTomadorForm((p) => ({ ...p, municipio: e.target.value }))}
+                  />
+                </label>
+                <label>
+                  <span>UF</span>
+                  <input
+                    value={tomadorForm.uf}
+                    maxLength={2}
+                    onChange={(e) => setTomadorForm((p) => ({ ...p, uf: e.target.value.toUpperCase() }))}
+                  />
+                </label>
+                <label>
+                  <span>CEP</span>
+                  <input
+                    value={tomadorForm.cep}
+                    onChange={(e) => setTomadorForm((p) => ({ ...p, cep: e.target.value }))}
+                  />
+                </label>
+                <label>
+                  <span>Telefone</span>
+                  <input
+                    value={tomadorForm.telefone}
+                    onChange={(e) => setTomadorForm((p) => ({ ...p, telefone: e.target.value }))}
+                  />
+                </label>
+                <label className="nfse-span-2">
+                  <span>E-mail</span>
+                  <input
+                    value={tomadorForm.email}
+                    onChange={(e) => setTomadorForm((p) => ({ ...p, email: e.target.value }))}
+                  />
+                </label>
+              </div>
+              <div className="nfse-actions">
+                <button type="submit" className="btn btn-primary" disabled={saving}>
+                  {saving ? "Salvando…" : "Salvar assessoria"}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={() => {
+                    setShowTomadorForm(false);
+                    setTomadorForm(EMPTY_TOMADOR);
+                  }}
+                >
+                  Cancelar
+                </button>
+              </div>
+            </form>
+          )}
+          {!tomadoresVisiveis.length && <p className="nfse-hint">Nenhuma assessoria com esse filtro.</p>}
+          {tomadoresVisiveis.map((t) => (
+            <article key={t.id || t.documento} className="nfse-nota">
+              <div>
+                <strong className="nfse-nota-num">{t.id}</strong>
+                <p>{t.razaoSocial || "Sem razão social"}</p>
+                <p className="nfse-hint">
+                  {t.documento || "sem documento"}
+                  {t.municipio ? ` · ${t.municipio}${t.uf ? `/${t.uf}` : ""}` : ""}
+                </p>
+              </div>
+              <div className="nfse-nota-actions">
+                <button type="button" className="btn btn-ghost" onClick={() => abrirCadastro(t)}>
+                  Editar
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={() => {
+                    setTomadorId(t.id);
+                    setTela("emitir");
+                    setLocalErr("");
+                    setLocalMsg(`${t.id} selecionada para a nota.`);
+                  }}
+                >
+                  Emitir
+                </button>
+              </div>
+            </article>
+          ))}
         </section>
       )}
 
@@ -710,12 +972,8 @@ export default function NfsePanel({
                     </option>
                   ))}
                 </select>
-                <button
-                  type="button"
-                  className="btn btn-ghost"
-                  onClick={() => setShowTomadorForm((v) => !v)}
-                >
-                  {showTomadorForm ? "Fechar" : "+ Tomador"}
+                <button type="button" className="btn btn-ghost" onClick={() => abrirCadastro(null)}>
+                  Cadastrar
                 </button>
               </div>
             </label>
@@ -751,89 +1009,6 @@ export default function NfsePanel({
               </label>
             </div>
 
-            {showTomadorForm && (
-              <div className="nfse-card">
-                <h3>Novo tomador</h3>
-                <div className="nfse-grid">
-                  <label>
-                    <span>Tipo</span>
-                    <select
-                      value={tomadorForm.tipo}
-                      onChange={(e) => setTomadorForm((p) => ({ ...p, tipo: e.target.value }))}
-                    >
-                      <option value="CNPJ">CNPJ</option>
-                      <option value="CPF">CPF</option>
-                    </select>
-                  </label>
-                  <label>
-                    <span>Documento</span>
-                    <input
-                      value={tomadorForm.documento}
-                      onChange={(e) => setTomadorForm((p) => ({ ...p, documento: e.target.value }))}
-                      required
-                    />
-                  </label>
-                  <label className="nfse-span-2">
-                    <span>Razão social</span>
-                    <input
-                      value={tomadorForm.razaoSocial}
-                      onChange={(e) => setTomadorForm((p) => ({ ...p, razaoSocial: e.target.value }))}
-                      required
-                    />
-                  </label>
-                  <label className="nfse-span-2">
-                    <span>Logradouro</span>
-                    <input
-                      value={tomadorForm.logradouro}
-                      onChange={(e) => setTomadorForm((p) => ({ ...p, logradouro: e.target.value }))}
-                    />
-                  </label>
-                  <label>
-                    <span>Número</span>
-                    <input
-                      value={tomadorForm.numero}
-                      onChange={(e) => setTomadorForm((p) => ({ ...p, numero: e.target.value }))}
-                    />
-                  </label>
-                  <label>
-                    <span>Bairro</span>
-                    <input
-                      value={tomadorForm.bairro}
-                      onChange={(e) => setTomadorForm((p) => ({ ...p, bairro: e.target.value }))}
-                    />
-                  </label>
-                  <label>
-                    <span>Município</span>
-                    <input
-                      value={tomadorForm.municipio}
-                      onChange={(e) => setTomadorForm((p) => ({ ...p, municipio: e.target.value }))}
-                    />
-                  </label>
-                  <label>
-                    <span>UF</span>
-                    <input
-                      value={tomadorForm.uf}
-                      maxLength={2}
-                      onChange={(e) =>
-                        setTomadorForm((p) => ({ ...p, uf: e.target.value.toUpperCase() }))
-                      }
-                    />
-                  </label>
-                  <label>
-                    <span>CEP</span>
-                    <input
-                      value={tomadorForm.cep}
-                      onChange={(e) => setTomadorForm((p) => ({ ...p, cep: e.target.value }))}
-                    />
-                  </label>
-                </div>
-                <div className="nfse-actions">
-                  <button type="button" className="btn btn-primary" onClick={saveTomador} disabled={saving}>
-                    Salvar tomador
-                  </button>
-                </div>
-              </div>
-            )}
           </>
         )}
 
@@ -1085,6 +1260,16 @@ export default function NfsePanel({
                 >
                   Baixar
                 </button>
+                {podeCancelar(emitidas.find((item) => item.id === pdfAberto.id) || {}) && (
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    onClick={() => cancelarNota(emitidas.find((item) => item.id === pdfAberto.id))}
+                    disabled={cancelandoId === pdfAberto.id}
+                  >
+                    {cancelandoId === pdfAberto.id ? "Cancelando…" : "Cancelar"}
+                  </button>
+                )}
                 <button type="button" className="btn btn-primary" onClick={() => setPdfAberto(null)}>
                   Fechar
                 </button>

@@ -58,6 +58,7 @@ google-sheets/imports/
 *.jpeg
 *.jpg
 *.png
+!google-sheets/nfse-worker/assets/*.png
 Documentos*/
 CONTROLE*/
 VISTORIA*/

@@ -2,6 +2,7 @@ import dotenv from "dotenv";
 import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { cancelarNaSefin } from "./dps.js";
 import { baixarPdfs, emitNfseOnPortal } from "./emit.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -66,6 +67,17 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (url.pathname === "/cancelar" && req.method === "POST") {
+      if (!authorize(req)) {
+        sendJson(res, 401, { error: "Não autorizado." });
+        return;
+      }
+      const body = await readJsonBody(req);
+      const result = await cancelarNaSefin(body);
+      sendJson(res, 200, result);
+      return;
+    }
+
     if (url.pathname === "/emit" && req.method === "POST") {
       if (!authorize(req)) {
         sendJson(res, 401, { error: "Não autorizado." });
@@ -89,5 +101,6 @@ server.listen(PORT, () => {
   console.log(`NFS-e worker → http://localhost:${PORT}`);
   console.log(`  GET  /health`);
   console.log(`  POST /emit`);
+  console.log(`  POST /cancelar`);
   console.log(`  POST /baixar`);
 });

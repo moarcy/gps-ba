@@ -1,23 +1,14 @@
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import forge from "node-forge";
 import { SignedXml } from "xml-crypto";
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
-function certFile() {
-  const configured = process.env.NFSE_CERT_PATH?.trim() || "certs/gps-bahia.pfx";
-  return path.resolve(__dirname, configured);
-}
+import { materialCertificado } from "./cert.js";
 
 function certBody(cert) {
   return forge.pki.certificateToPem(cert).replace(/-----BEGIN CERTIFICATE-----|-----END CERTIFICATE-----|\s/g, "");
 }
 
 function loadPfx() {
-  const passphrase = process.env.NFSE_CERT_PASSWORD || "";
-  const der = fs.readFileSync(certFile()).toString("binary");
+  const { pfx, passphrase } = materialCertificado();
+  const der = pfx.toString("binary");
   const p12 = forge.pkcs12.pkcs12FromAsn1(forge.asn1.fromDer(der), false, passphrase);
   const keyBag = p12.getBags({ bagType: forge.pki.oids.pkcs8ShroudedKeyBag })[
     forge.pki.oids.pkcs8ShroudedKeyBag

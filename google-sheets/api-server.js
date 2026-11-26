@@ -18,7 +18,7 @@ import {
   scopeLocalizados,
   updatePosicao,
 } from "./lib/localizados-service.js";
-import { baixarPdfEmitida, emitNfse, emitNfseLote, getNfseData, pdfEmitida, upsertTomador } from "./lib/nfse-service.js";
+import { baixarPdfEmitida, cancelarNfse, emitNfse, emitNfseLote, getNfseData, prepararPdf, upsertTomador } from "./lib/nfse-service.js";
 import { getRadarData } from "./lib/radar-service.js";
 import {
   mergeControleRecords,
@@ -234,13 +234,13 @@ const server = http.createServer(async (req, res) => {
 
     if (url.pathname === "/api/nfse/pdf" && req.method === "GET") {
       requireAdmin(req);
-      const pdf = await pdfEmitida(url.searchParams.get("id"));
-      if (!pdf) {
+      const prep = await prepararPdf(url.searchParams.get("id"));
+      if (!prep) {
         sendJson(res, 404, { error: "PDF desta nota ainda não está no sistema." });
         return;
       }
-      const body = fs.readFileSync(pdf.file);
-      const filename = `${pdf.nomeArquivo}.pdf`;
+      const body = prep.buffer || (await (await import("./nfse-worker/danfse.js")).pdfDeHtml(prep.html));
+      const filename = prep.filename;
       const ascii = filename.replace(/[^\x20-\x7E]/g, "_").replace(/["\\]/g, "");
       const encoded = encodeURIComponent(filename);
       const inline = url.searchParams.get("inline") === "1";
@@ -285,7 +285,12 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      sendJson(res, 400, { error: "action inválida. Use: emit | emit_lote | baixar_pdf | upsert_tomador" });
+      if (action === "cancelar" || action === "cancel") {
+        sendJson(res, 200, await cancelarNfse(body));
+        return;
+      }
+
+      sendJson(res, 400, { error: "action inválida. Use: emit | emit_lote | baixar_pdf | cancelar | upsert_tomador" });
       return;
     }
 

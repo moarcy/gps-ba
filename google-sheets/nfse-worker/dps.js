@@ -4,7 +4,8 @@ import path from "node:path";
 import zlib from "node:zlib";
 import { fileURLToPath } from "node:url";
 import { linhaUnica, motivoSubstituicao, tributacaoNacional } from "../lib/nfse-nota.js";
-import { aliquotaSimples, signDpsXml } from "./sign-dps.js";
+import { materialCertificado } from "./cert.js";
+import { aliquotaSimples, signDpsXml, signXmlElement } from "./sign-dps.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CONTADOR = path.join(__dirname, "data", "dps-contador.json");
@@ -78,11 +79,7 @@ function agoraBahia() {
 }
 
 function certMaterial() {
-  const configured = process.env.NFSE_CERT_PATH?.trim() || "certs/gps-bahia.pfx";
-  const pfx = fs.readFileSync(path.resolve(__dirname, configured));
-  const passphrase = process.env.NFSE_CERT_PASSWORD || "";
-  if (!passphrase) throw new Error("Certificado A1 não configurado.");
-  return { pfx, passphrase };
+  return materialCertificado();
 }
 
 function sefinHttp(method, pathname, body) {
@@ -123,15 +120,19 @@ function lerContador(serie) {
 }
 
 function gravarContador(serie, ultimo) {
-  fs.mkdirSync(path.dirname(CONTADOR), { recursive: true });
-  const atual = fs.existsSync(CONTADOR) ? JSON.parse(fs.readFileSync(CONTADOR, "utf8")) : {};
-  atual[String(serie)] = ultimo;
-  fs.writeFileSync(CONTADOR, JSON.stringify(atual));
+  try {
+    fs.mkdirSync(path.dirname(CONTADOR), { recursive: true });
+    const atual = fs.existsSync(CONTADOR) ? JSON.parse(fs.readFileSync(CONTADOR, "utf8")) : {};
+    atual[String(serie)] = ultimo;
+    fs.writeFileSync(CONTADOR, JSON.stringify(atual));
+  } catch {
+    // Na Vercel o disco some entre chamadas. A Sefin continua dizendo qual número está livre.
+  }
 }
 
-async function proximoNumero(cnpj, cMun) {
+async function proximoNumero(cnpj, cMun, piso = 0) {
   const serie = serieDps();
-  let ultimo = lerContador(serie);
+  let ultimo = Math.max(lerContador(serie), Number(piso) || 0);
   for (let nDps = ultimo + 1; nDps <= ultimo + 30; nDps += 1) {
     const { corpo } = identDps({ cMun, cnpj, serie, nDps });
     const resposta = await sefinHttp("HEAD", `/dps/${corpo}`);
@@ -220,6 +221,53 @@ export async function montarDpsXml(payload, { nDps, serie } = {}) {
   return `<?xml version="1.0" encoding="utf-8"?><DPS versao="1.01" xmlns="http://www.sped.fazenda.gov.br/nfse"><infDPS Id="${ident.id}"><tpAmb>${tpAmb()}</tpAmb><dhEmi>${agoraBahia()}</dhEmi><verAplic>GPSBA_1.0.0</verAplic><serie>${Number(faixa)}</serie><nDPS>${Number(numero)}</nDPS><dCompet>${competencia}</dCompet><tpEmit>1</tpEmit>${rtc ? "<finNFSe>0</finNFSe>" : ""}<cLocEmi>${cMun}</cLocEmi>${subst}<prest><CNPJ>${cnpj}</CNPJ><fone>${PRESTADOR.fone}</fone><email>${PRESTADOR.email}</email><regTrib><opSimpNac>3</opSimpNac><regApTribSN>1</regApTribSN><regEspTrib>0</regEspTrib></regTrib></prest><toma>${documento.length <= 11 ? tag("CPF", documento.padStart(11, "0")) : tag("CNPJ", documento)}<xNome>${xml(nomeTomador)}</xNome><end><endNac><cMun>${local.cMun}</cMun>${tag("CEP", soDigitos(tomador.cep))}</endNac>${tag("xLgr", local.logradouro || tomador.logradouro)}${tag("nro", numeroEndereco)}${tag("xBairro", local.bairro || tomador.bairro)}</end></toma><serv><locPrest><cLocPrestacao>${cMun}</cLocPrestacao></locPrest><cServ><cTribNac>${servico.codigo}</cTribNac>${rtc ? "" : "<cTribMun>001</cTribMun>"}${rtc ? `<cNBS>${servico.nbs}</cNBS><xDescServ>${xml(descricao)}</xDescServ>` : `<xDescServ>${xml(descricao)}</xDescServ><cNBS>${servico.nbs}</cNBS>`}</cServ>${complemento ? `<infoCompl><xInfComp>${xml(complemento)}</xInfComp></infoCompl>` : ""}</serv><valores><vServPrest><vServ>${money(valor)}</vServ></vServPrest><trib><tribMun><tribISSQN>1</tribISSQN><tpRetISSQN>1</tpRetISSQN></tribMun><totTrib><pTotTribSN>${aliquotaSimples()}</pTotTribSN></totTrib></trib></valores></infDPS></DPS>`;
 }
 
+export function pedidoCancelamentoXml({ chave, motivo, cMotivo = "1", cnpj } = {}) {
+  const acesso = soDigitos(chave);
+  if (acesso.length !== 50) throw new Error("Essa nota não tem chave de acesso para cancelar.");
+  const codigo = ["1", "2", "9"].includes(String(cMotivo)) ? String(cMotivo) : "1";
+  let texto = String(motivo || "").replace(/\s+/g, " ").trim();
+  if (texto.length < 15) texto = "Erro na emissão da nota.";
+  if (texto.length > 255) texto = texto.slice(0, 255);
+  const id = `PRE${acesso}101101`;
+  const autor = soDigitos(cnpj) || PRESTADOR.cnpj;
+  return `<?xml version="1.0" encoding="utf-8"?><pedRegEvento versao="1.01" xmlns="http://www.sped.fazenda.gov.br/nfse"><infPedReg Id="${id}"><tpAmb>${tpAmb()}</tpAmb><verAplic>GPSBA_1.0.0</verAplic><dhEvento>${agoraBahia()}</dhEvento><CNPJAutor>${autor}</CNPJAutor><chNFSe>${acesso}</chNFSe><e101101><xDesc>Cancelamento de NFS-e</xDesc><cMotivo>${codigo}</cMotivo><xMotivo>${xml(texto)}</xMotivo></e101101></infPedReg></pedRegEvento>`;
+}
+
+function mensagensSefin(text) {
+  let json = {};
+  try {
+    json = JSON.parse(text);
+  } catch {
+    json = {};
+  }
+  const lista = json.erros || json.Erros || json.erro || json.Erro || [];
+  const itens = Array.isArray(lista) ? lista : [lista];
+  const mensagens = itens
+    .map((erro) => [erro?.Codigo || erro?.codigo, erro?.Descricao || erro?.descricao, erro?.Complemento || erro?.complemento].filter(Boolean).join(" "))
+    .filter(Boolean);
+  return mensagens.join(" | ");
+}
+
+export async function cancelarNaSefin(payload = {}) {
+  const pedido = signXmlElement(
+    pedidoCancelamentoXml({
+      chave: payload.chave,
+      motivo: payload.motivo,
+      cMotivo: payload.cMotivo,
+      cnpj: payload.cnpj || payload.config?.prestadorCnpj,
+    }),
+    "infPedReg",
+  );
+  const chave = soDigitos(payload.chave);
+  const pedidoRegistroEventoXmlGZipB64 = zlib.gzipSync(Buffer.from(pedido, "utf8")).toString("base64");
+  const resposta = await sefinHttp("POST", `/nfse/${chave}/eventos`, JSON.stringify({ pedidoRegistroEventoXmlGZipB64 }));
+  if (resposta.status < 200 || resposta.status >= 300) {
+    const detalhe = mensagensSefin(resposta.body);
+    throw new Error(detalhe || `A Sefin Nacional recusou o cancelamento (HTTP ${resposta.status}). ${String(resposta.body || "").slice(0, 300)}`);
+  }
+  return { ok: true, chave };
+}
+
 function erroSefin(status, text) {
   let json = {};
   try {
@@ -238,7 +286,7 @@ export async function emitirNaSefin(payload) {
   const cnpj = soDigitos(payload.config?.prestadorCnpj) || PRESTADOR.cnpj;
   const cMun = soDigitos(payload.config?.codigoMunicipio) || PRESTADOR.cMun;
   const serie = serieDps();
-  const nDps = await proximoNumero(cnpj, cMun);
+  const nDps = await proximoNumero(cnpj, cMun, payload.pisoDps);
   const assinado = signDpsXml(await montarDpsXml(payload, { nDps, serie }));
   const dpsXmlGZipB64 = zlib.gzipSync(Buffer.from(assinado, "utf8")).toString("base64");
   const resposta = await sefinHttp("POST", "/nfse", JSON.stringify({ dpsXmlGZipB64 }));

@@ -1,5 +1,5 @@
 import { requireAdmin } from "../google-sheets/lib/access-control.js";
-import { baixarPdfEmitida, emitNfse, emitNfseLote, getNfseData, upsertTomador } from "../google-sheets/lib/nfse-service.js";
+import { baixarPdfEmitida, cancelarNfse, emitNfse, emitNfseLote, getNfseData, upsertTomador } from "../google-sheets/lib/nfse-service.js";
 
 function readJsonBody(req) {
   if (req.body && typeof req.body === "object") return req.body;
@@ -55,8 +55,14 @@ export default async function handler(req, res) {
         return;
       }
 
+      if (action === "cancelar" || action === "cancel") {
+        const result = await cancelarNfse(body);
+        res.status(200).json(result);
+        return;
+      }
+
       res.status(400).json({
-        error: "action inválida. Use: emit | emit_lote | baixar_pdf | upsert_tomador",
+        error: "action inválida. Use: emit | emit_lote | baixar_pdf | cancelar | upsert_tomador",
       });
       return;
     }

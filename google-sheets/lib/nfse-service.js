@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { downloadExcel, editarPlanilha, uploadExcel } from "../excel-drive-client.js";
 import { asNumber, normalizePlaca, normalizeText } from "./excel-utils.js";
 import { buildDescricaoNota, buildNomeArquivo, linhaUnica, motivoSubstituicao, tipoNota } from "./nfse-nota.js";
+import { certificadoConfigurado } from "../nfse-worker/cert.js";
 
 const NOTAS_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../nfse-worker/notas");
 
@@ -83,9 +84,9 @@ async function loadNfseSnapshot({ persistIfCreated = true } = {}) {
     servicos: readServicos(sheets.servicos),
     emitidas: readEmitidas(sheets.emitidas, { limit: 1000 }).map((emitida) => ({
       ...emitida,
-      pdf: Boolean(arquivoPdfNfse(emitida.nomeArquivo)),
+      pdf: Boolean(arquivoPdfNfse(emitida.nomeArquivo) || String(emitida.chaveAcesso || "").replace(/\D/g, "").length === 50),
     })),
-    workerConfigured: Boolean(process.env.NFSE_WORKER_URL?.trim()),
+    workerConfigured: Boolean(process.env.NFSE_WORKER_URL?.trim() || certificadoConfigurado()),
   };
 }
 
@@ -100,15 +101,53 @@ export async function upsertTomador(body) {
   });
 }
 
+function pisoDasNotas(emitidas) {
+  return (emitidas || []).reduce((max, item) => {
+    const numero = Number(String(item.numeroNf || "").replace(/\D/g, ""));
+    return Number.isFinite(numero) ? Math.max(max, numero) : max;
+  }, 0);
+}
+
+async function cancelarNaSefinDireto(payload) {
+  if (!certificadoConfigurado()) {
+    const err = new Error("Certificado da NFS-e não configurado neste ambiente.");
+    err.status = 503;
+    throw err;
+  }
+  const { cancelarNaSefin } = await import("../nfse-worker/dps.js");
+  return cancelarNaSefin(payload);
+}
+
+async function emitirNaSefinDireto(payload) {
+  if (!certificadoConfigurado()) {
+    const err = new Error("Certificado da NFS-e não configurado neste ambiente.");
+    err.status = 503;
+    throw err;
+  }
+  const { emitirNaSefin } = await import("../nfse-worker/dps.js");
+  let emitida;
+  try {
+    emitida = await emitirNaSefin(payload);
+  } catch (error) {
+    if (!error.dpsUsada) throw error;
+    emitida = await emitirNaSefin(payload);
+  }
+  return {
+    ok: true,
+    numeroNf: emitida.numeroNf,
+    chave: emitida.chave,
+    nomeArquivo: buildNomeArquivo({ ...(payload.arquivo || {}), numero: emitida.numeroNf }),
+    message: "NFS-e autorizada na Sefin Nacional.",
+  };
+}
+
 async function callWorker(payload, pathname = "/emit") {
   const url = process.env.NFSE_WORKER_URL?.trim();
   const secret = process.env.NFSE_WORKER_SECRET?.trim();
   if (!url) {
-    const err = new Error(
-      "NFSE_WORKER_URL não configurado. Suba o worker Playwright (local ou Fly) e aponte a URL.",
-    );
-    err.status = 503;
-    throw err;
+    if (pathname === "/baixar") return { ok: true, nomeArquivo: payload.nomeArquivo || "" };
+    if (pathname === "/cancelar") return cancelarNaSefinDireto(payload);
+    return emitirNaSefinDireto(payload);
   }
 
   const controller = new AbortController();
@@ -290,6 +329,7 @@ export async function emitNfse(body = {}) {
       financiado,
       assessoria: tomador.id || tomador.razaoSocial,
     },
+    pisoDps: pisoDasNotas(snapshot.emitidas),
   };
 
   let workerResult;
@@ -417,12 +457,72 @@ export async function emitNfseLote(body = {}) {
   return { resultados };
 }
 
+const JA_CANCELADA = /j[aá] cancelad|evento de cancelamento j[aá]|E2020/i;
+
+export async function cancelarNfse(body = {}) {
+  const snapshot = await loadNfseSnapshot();
+  const id = normalizeText(body.id);
+  const emitida = snapshot.emitidas.find((item) => item.id === id);
+  if (!emitida) {
+    const err = new Error("Nota não encontrada.");
+    err.status = 404;
+    throw err;
+  }
+  if (emitida.status === "cancelada") {
+    return { emitida, jaCancelada: true };
+  }
+  if (emitida.status !== "authorized") {
+    const err = new Error("Só uma nota autorizada pode ser cancelada.");
+    err.status = 400;
+    throw err;
+  }
+  const chave = String(emitida.chaveAcesso || "").replace(/\D/g, "");
+  if (chave.length !== 50) {
+    const err = new Error("Essa nota não tem chave de acesso para cancelar.");
+    err.status = 400;
+    throw err;
+  }
+
+  try {
+    await callWorker(
+      {
+        chave,
+        motivo: body.motivo || body.xMotivo || "",
+        cMotivo: body.cMotivo || body.motivoCodigo || "1",
+        config: { prestadorCnpj: snapshot.config?.prestador_cnpj },
+      },
+      "/cancelar",
+    );
+  } catch (err) {
+    if (!JA_CANCELADA.test(err.message || "")) throw err;
+  }
+
+  const updated = await withGestorWorkbook((_wb, sheets) =>
+    updateEmitidaRow(sheets.emitidas, id, { status: "cancelada", erro: "" }),
+  );
+  return { emitida: updated, jaCancelada: false };
+}
+
 export async function pdfEmitida(id) {
   const snapshot = await loadNfseSnapshot({ persistIfCreated: false });
   const emitida = snapshot.emitidas.find((item) => item.id === normalizeText(id));
   const file = arquivoPdfNfse(emitida?.nomeArquivo);
   if (!emitida || !file) return null;
   return { nomeArquivo: emitida.nomeArquivo, file };
+}
+
+export async function prepararPdf(id) {
+  const snapshot = await loadNfseSnapshot({ persistIfCreated: false });
+  const emitida = snapshot.emitidas.find((item) => item.id === normalizeText(id));
+  if (!emitida) return null;
+  const filename = `${emitida.nomeArquivo || emitida.numeroNf || "nfse"}.pdf`;
+  const file = arquivoPdfNfse(emitida.nomeArquivo);
+  if (file) return { filename, buffer: fs.readFileSync(file) };
+  const chave = String(emitida.chaveAcesso || "").replace(/\D/g, "");
+  if (chave.length !== 50) return null;
+  const { buscarXmlNfse } = await import("../nfse-worker/sefin-xml.js");
+  const { htmlDanfse } = await import("../nfse-worker/danfse-html.js");
+  return { filename, html: await htmlDanfse(await buscarXmlNfse(chave)) };
 }
 
 export async function baixarPdfEmitida(body = {}) {
